@@ -1,39 +1,44 @@
-﻿# SensLab
+# SensLab
 
-SensLab helps FPS players find a starting mouse sensitivity for CS2 or VALORANT, then practice with that setting in an original, plain 3D range.
+SensLab is a visual sensitivity and settings advisor for FPS gamers. Instead of typing numbers and guessing, players move their mouse in a 3D shooting range, and SensLab turns that movement into a starting sensitivity for their own game.
 
-## Run the project
+## Features
 
-With Docker Desktop running, open PowerShell at the repository root and run:
+### Available now
 
-```powershell
-docker compose up --build
-```
+- **Game conversion:** choose CS2 or VALORANT and get in-game sensitivity values based on your mouse DPI.
+- **Swipe measurement:** make one comfortable swipe across your mousepad, and SensLab maps it to a 180 degree turn.
+- **Three candidates:** lower, middle and higher sensitivity options, so you choose what feels right.
+- **3D shooting range:** an original, plain range with pointer lock and raw mouse input.
+- **Measured drills:** flick (30 targets), tracking (20 seconds) and precision (20 small targets), each with a countdown.
+- **Detailed results:** hit rate, time to hit, overshoot, undershoot and angular error, built from raw mouse samples and click times.
+- **Session history:** compare your own results between candidates within the same session.
+- **Crosshair options:** choose the shape, color, size and gap.
 
-Open <http://localhost:3000>. The API health endpoint is <http://localhost:8000/health>. Stop the services with `Ctrl+C`.
+### Planned
 
-## Phase 1: get three game settings
+- **Guided sensitivity test:** random-order rounds, scoring and a recommended sensitivity range with a confidence note.
+- **More games:** Apex Legends, Overwatch 2, Fortnite and Call of Duty, each added only with verified values.
+- **Settings advice:** scoped (ADS) sensitivity matching and a shareable result card.
+- **Recoil practice:** a recoil drill with original spray patterns, plus rule-based advice from your results.
+- **Accounts and saved results:** history, retest comparison and a paid report through UPI (Razorpay).
+- **Windows background tracker:** a mouse-only tray app that reports flick and overshoot trends, with data kept on your computer.
+- **Mobile games:** touch aim tests and settings for mobile titles.
 
-1. Choose CS2 or VALORANT.
-2. Enter the DPI currently active on your mouse. SensLab cannot read or change hardware DPI. If unknown, check your mouse software or use the three card-length movement estimate under **How do I set or check my DPI?** The estimate measures counts per distance and does not read your sensor configuration.
-3. Click **Measure my comfortable swipe**, click inside the 3D range to capture the mouse, move from one comfortable edge of the mousepad to the other, then press `Esc`. SensLab maps that physical swipe to a 180 degree turn.
-4. Review lower, middle, and higher game sensitivity values. Pick one to use in Phase 2.
-5. Set the displayed DPI in your mouse's software and enter the displayed sensitivity in the selected game yourself.
+## Tech stack
 
-The sensitivity math uses approximate yaw constants: CS2 `0.022` and VALORANT `0.06996` degrees per mouse count at sensitivity 1. The VALORANT value is often rounded to `0.07`. These community/reference values are not presented as vendor-verified guarantees. See [KovaaK's converter](https://www.kovaak.com/kovaaks/sens-converter) and [Gear Geeks gaming constants](https://geargeeksgaming.com/data/game-sensitivity-constants/). Treat the resulting in-game values as starting estimates and adjust them in-game yourself.
+| Part | Technology |
+| --- | --- |
+| Web app | Next.js, TypeScript, Three.js |
+| API | FastAPI (Python) |
+| Database | PostgreSQL |
+| Environment | Docker Compose |
+| Planned | Razorpay for payments, a Windows tray app in C# (.NET) or Tauri |
 
-The three options are simple nearby variants of the measured comfortable turn: lower is 12% slower, middle matches the swipe measurement, and higher is 12% faster. SensLab does not automatically choose a winner.
+## Principles
 
-## Phase 2: practice the chosen setting
-
-Phase 2 unlocks after you choose a Phase 1 candidate. Each drill uses that candidate's measured movement scale and displays its game sensitivity and DPI. Try the candidates separately, then compare your own practice results in the page's session history and decide which feels right. Phase 2 does not select a winner for you.
-
-The drills are flick (30 targets), tracking (20 seconds), and precision (20 small targets). Each round has a short countdown. Results include measured metrics and raw mouse samples/click times, held in memory for the current browser page only. No gameplay screens or game memory are read, and SensLab never changes your game input.
-
-Drill settings live in `web/lib/drillConfig.ts`; pure metric calculations and fake-data tests are in `web/lib/metrics/`.
-
-To run metric and sensitivity unit tests while the web container is running, open another PowerShell at the repository root and run:
-
-```powershell
-docker compose exec web npm test
-```
+- SensLab only measures and recommends. It never reads a game's screen or memory and never changes game input.
+- It uses only original, plain visuals and no real game assets.
+- Results are starting points, and the player decides what feels right.
+- Practice results stay in the browser session and are not sent anywhere.
+- The planned Windows tracker uses Windows Raw Input only, logs mouse movement and click times (never keystrokes), and keeps data local unless the player opts in.
