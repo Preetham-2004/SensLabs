@@ -1,7 +1,8 @@
 export type ClickSample = { time: number; hit: boolean; errorDeg: number };
+export type MouseSample = { time: number; dx: number; dy: number; yaw: number; pitch: number };
 export type FlickAttempt = ClickSample & { spawnTime: number; overshootDeg: number; undershootDeg: number };
 export type TrackingObservation = { time: number; errorDeg: number; targetRadiusDeg: number };
-export type FlickMetrics = { hitRatePercent: number; meanTimeToHitMs: number; misses: number; meanOvershootDeg: number; meanUndershootDeg: number; meanFinalErrorDeg: number };
+export type FlickMetrics = { hitRatePercent: number; shotsTaken: number; meanTimeToHitMs: number; misses: number; meanOvershootDeg: number; meanUndershootDeg: number; meanFinalErrorDeg: number };
 export type TrackingMetrics = { onTargetPercent: number; meanAngularErrorDeg: number; rmsAngularErrorDeg: number };
 export type PrecisionMetrics = { hitRatePercent: number; meanTimeToHitMs: number; meanFinalErrorDeg: number };
 
@@ -39,6 +40,7 @@ export function calculateFlickMetrics(attempts: FlickAttempt[]): FlickMetrics {
   const hits = attempts.filter((attempt) => attempt.hit);
   return {
     hitRatePercent: attempts.length ? (hits.length / attempts.length) * 100 : 0,
+    shotsTaken: attempts.length,
     meanTimeToHitMs: average(hits.map((attempt) => attempt.time - attempt.spawnTime)),
     misses: attempts.length - hits.length,
     meanOvershootDeg: average(attempts.map((attempt) => attempt.overshootDeg)),

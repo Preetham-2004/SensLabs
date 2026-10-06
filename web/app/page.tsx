@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import * as THREE from "three";
-import DrillSuite from "./DrillSuite";
 import { GAME_PROFILES, type GameId } from "../lib/gameProfiles";
 import { gameSensitivityForCm360 } from "../lib/sensitivity";
 import styles from "./page.module.css";
@@ -45,27 +45,27 @@ export default function Home() {
     if (!host) return;
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#dce6e9");
-    scene.fog = new THREE.Fog("#dce6e9", 14, 36);
+    scene.background = new THREE.Color("#152334");
+    scene.fog = new THREE.Fog("#152334", 16, 38);
     const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
     camera.position.set(0, 1.65, 6);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.appendChild(renderer.domElement);
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x71808a, 2.1));
-    const light = new THREE.DirectionalLight(0xffffff, 2.6);
+    scene.add(new THREE.HemisphereLight(0xe7fff8, 0x1a2c2a, 1.9));
+    const light = new THREE.DirectionalLight(0xffffff, 2.4);
     light.position.set(-4, 8, 5);
     scene.add(light);
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(18, 24),
-      new THREE.MeshStandardMaterial({ color: 0x8c9b96, roughness: 0.9 }),
+      new THREE.MeshStandardMaterial({ color: 0x26384d, roughness: 0.88 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.position.z = -2;
     scene.add(floor);
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xe5e2d8, roughness: 0.95 });
+    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x34465c, roughness: 0.92 });
     const backWall = new THREE.Mesh(new THREE.BoxGeometry(18, 7, 0.3), wallMaterial);
     backWall.position.set(0, 3.5, -14);
     scene.add(backWall);
@@ -74,6 +74,14 @@ export default function Home() {
       wall.position.set(x, 3.5, -2);
       scene.add(wall);
     }
+    const lane = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 22), new THREE.MeshBasicMaterial({ color: 0x91b4bf }));
+    lane.rotation.x = -Math.PI / 2;
+    lane.position.set(0, 0.02, -2);
+    scene.add(lane);
+    const marker = new THREE.Mesh(new THREE.PlaneGeometry(8, 0.08), new THREE.MeshBasicMaterial({ color: 0x8da3b5 }));
+    marker.rotation.x = -Math.PI / 2;
+    marker.position.set(0, 0.025, -8);
+    scene.add(marker);
 
     const resize = () => {
       if (!host.clientWidth || !host.clientHeight) return;
@@ -137,7 +145,7 @@ export default function Home() {
       }
       setSweepCounts(count);
       setSelectedCandidateId(null);
-      setMessage("Your movement is measured. Choose one of the three game settings below to practice in Phase 2.");
+      setMessage("Swipe captured. Now choose your weapon below and head to Phase 2.");
       setErrorMessage("");
       session.phase = "done";
       setPhase("done");
@@ -194,7 +202,7 @@ export default function Home() {
         }
       });
       renderer.dispose();
-      renderer.domElement.remove();
+      renderer.domElement.parentElement?.removeChild(renderer.domElement);
     };
   }, []);
 
@@ -209,7 +217,7 @@ export default function Home() {
     setSweepCounts(0);
     setSelectedCandidateId(null);
     setErrorMessage("");
-    setMessage("Click Start swipe below. Then click the range to capture the mouse, swipe once, and press Esc to finish.");
+    setMessage("Click Start below, then click the chamber to engage. One full swipe, then Esc to finish.");
     setPhase("sweep");
   };
 
@@ -224,7 +232,7 @@ export default function Home() {
     session.sweepCounts = 0;
     setDpiCounts(0);
     setErrorMessage("");
-    setMessage("Click Start estimate below. Then click the range, move one card length, and press Esc to save this swipe.");
+    setMessage("Click Start estimate below, then click the chamber. One card length, then Esc to lock it.");
     setPhase("dpi");
   };
 
@@ -245,32 +253,70 @@ export default function Home() {
   const practiceBaselineCounts = selectedCandidate && phase === "done" && sweepCounts > 0
     ? sweepCounts / selectedCandidate.factor
     : 0;
+  const practiceHref = selectedCandidate && validDpi
+    ? { pathname: "/practice", query: {
+        game: selectedGame,
+        dpi: String(validDpi),
+        sensitivity: selectedCandidate.gameSensitivity.toFixed(3),
+        baseline: String(practiceBaselineCounts),
+      } }
+    : null;
+  const step1State = validDpi && phase !== "dpi" ? "done" : "current";
+  const step2State = !validDpi || phase === "dpi" ? "idle" : phase === "sweep" || sweepCounts === 0 ? "current" : "done";
+  const step3State = phase !== "done" ? "idle" : selectedCandidate ? "done" : "current";
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>SENSLAB / AIM SETUP</p>
-          <h1>Find your starting sensitivity</h1>
+        <div className={styles.brand}>
+          <span className={styles.logoMark} aria-hidden="true">SL</span>
+          <div>
+            <p className={styles.eyebrow}>SensLab // Aim Lab</p>
+            <h1>Dial in. Lock in. Dominate.</h1>
+          </div>
         </div>
-        <p className={styles.status}>{locked ? `MOUSE CAPTURED · ${rawInput ? "RAW INPUT" : "STANDARD INPUT"} · ESC TO RELEASE` : "CS2 + VALORANT"}</p>
+        <nav className={styles.phaseNav} aria-label="App phases">
+          <span className={`${styles.phaseChip} ${styles.phaseChipActive}`}><em>01</em> Setup</span>
+          {practiceHref ? (
+            <Link className={styles.phaseChip} href={practiceHref}><em>02</em> Practice</Link>
+          ) : (
+            <span className={styles.phaseChip} aria-disabled="true"><em>02</em> Practice</span>
+          )}
+        </nav>
+        <p className={styles.status}>{locked ? `Mouse captured · ${rawInput ? "raw input" : "OS accel active"} · Esc to release` : `${GAME_PROFILES[selectedGame].name} · ready to calibrate`}</p>
       </header>
+
+      <ol className={styles.stepper} aria-label="Phase 1 steps">
+        <li className={styles.stepperItem} data-state={step1State}>
+          <span>01</span>
+          <div><strong>Game &amp; DPI</strong><p>{validDpi ? `${validDpi} DPI — dialed in` : "Select your title & sensor DPI"}</p></div>
+        </li>
+        <li className={styles.stepperItem} data-state={step2State}>
+          <span>02</span>
+          <div><strong>Natural swipe</strong><p>{sweepCounts > 0 && phase !== "sweep" ? `${sweepCounts.toLocaleString()} counts captured` : "One clean swipe edge-to-edge"}</p></div>
+        </li>
+        <li className={styles.stepperItem} data-state={step3State}>
+          <span>03</span>
+          <div><strong>Choose your weapon</strong><p>{selectedCandidate ? `${selectedCandidate.label} — locked` : "Three settings. You decide."}</p></div>
+        </li>
+      </ol>
 
       <section className={styles.layout}>
         <div className={styles.range} ref={viewRef} aria-label="Neutral first-person mouse movement measurement range">
+          <div className={styles.rangeBadge}>Calibration Chamber</div>
           <div className={styles.crosshair} aria-hidden="true"><span /><span /></div>
-          {!locked && <div className={styles.enterHint} aria-hidden="true">{phase === "sweep" || phase === "dpi" ? "Click to capture mouse" : "Complete the steps, then start your swipe"}</div>}
+          {!locked && <div className={styles.enterHint} aria-hidden="true">{phase === "sweep" || phase === "dpi" ? "Click to engage" : "Set up your config, then lock in"}</div>}
         </div>
 
         <aside className={styles.panel}>
           <section className={styles.intro}>
-            <p className={styles.eyebrow}>PHASE 1 / FIND YOUR BASELINE</p>
-            <h2>Three quick steps</h2>
-            <p className={styles.hint}>Choose your game and DPI, measure one comfortable swipe, then pick a setting to practice.</p>
+            <p className={styles.eyebrow}>Phase 1 // Calibration</p>
+            <h2>Zero in on your sens</h2>
+            <p className={styles.hint}>Select your game and DPI, capture your natural swipe, then choose the setting that feels right.</p>
           </section>
 
-          <section className={styles.task}>
-            <p className={styles.step}><span>01</span> Game &amp; DPI</p>
+          <section className={styles.task} data-state={step1State}>
+            <p className={styles.step}><span>01</span> Game &amp; Sensor</p>
             <div className={styles.inlineFields}>
               <label className={styles.field}><span>GAME</span><select id="game" value={selectedGame} onChange={(event) => {
                 setSelectedGame(event.target.value as GameId);
@@ -295,9 +341,9 @@ export default function Home() {
                 setPhase("setup");
               }} /></label>
             </div>
-            <p className={styles.hint}>{validDpi ? `Using ${validDpi} DPI. Keep this value set in your mouse app while you test.` : "Enter the DPI active in your mouse app to calculate game settings."}</p>
+            <p className={styles.hint}>{validDpi ? `Locked at ${validDpi} DPI. Keep this set in your mouse software.` : "Punch in the DPI from your mouse software to compute your settings."}</p>
             <details className={styles.dpiHelp}>
-              <summary>Don't know your DPI? Estimate it</summary>
+              <summary>No idea? Estimate it here</summary>
               <p className={styles.hint}>Check it in your mouse app first if possible. Otherwise use a standard card's long edge for three swipes. This estimates counts per inch; it cannot read your mouse sensor setting.</p>
               {phase === "dpi" ? (
                 <p className={styles.activeTask}>Swipe one card length and press Esc. Counts: {dpiCounts}</p>
@@ -308,7 +354,7 @@ export default function Home() {
             </details>
           </section>
 
-          <section className={styles.task}>
+          <section className={styles.task} data-state={step2State}>
             <p className={styles.step}><span>02</span> Measure your swipe</p>
             <p className={styles.hint}>Use a comfortable mousepad distance. SensLab treats it as a 180° turn.</p>
             {phase === "sweep" ? (
@@ -333,27 +379,27 @@ export default function Home() {
           {errorMessage && <p className={styles.error} role="alert">{errorMessage}</p>}
 
           {phase === "done" && (
-            <section className={styles.task}>
+            <section className={styles.task} data-state={step3State}>
               <p className={styles.step}><span>03</span> Pick a setting to practice</p>
               <p className={styles.hint}>Choose a starting point. You decide which feels best in Phase 2. <a href={gameProfile.yawSourceUrl} target="_blank" rel="noreferrer">About the game value</a></p>
               <div className={styles.candidateList}>
                 {candidateSettings.map((candidate) => (
-                  <article className={styles.candidateCard} key={candidate.id}>
-                    <span>{candidate.label.toUpperCase()}</span>
+                  <article className={`${styles.candidateCard} ${selectedCandidateId === candidate.id ? styles.candidateCardSelected : ""}`} key={candidate.id}>
+                    <span>{candidate.label}</span>
                     <strong>{candidate.gameSensitivity.toFixed(3)}</strong>
                     <p>{candidate.hint}</p>
-                    <p>{candidate.cm360.toFixed(1)} cm for one full turn at {validDpi} DPI</p>
+                    <p>{candidate.cm360.toFixed(1)} cm / 360° at {validDpi} DPI</p>
                     <button className={selectedCandidateId === candidate.id ? styles.secondaryButton : styles.primaryButton} onClick={() => setSelectedCandidateId(candidate.id)}>
-                      {selectedCandidateId === candidate.id ? "Selected for Phase 2" : "Choose this setting"}
+                      {selectedCandidateId === candidate.id ? "Selected for practice" : "Choose this setting"}
                     </button>
                   </article>
                 ))}
               </div>
-              {selectedCandidate && <div className={styles.recommendation}>
-                <span>YOUR PHASE 2 SETTING</span>
+              {selectedCandidate && practiceHref && <div className={styles.recommendation}>
+                <span>Your Phase 2 setting</span>
                 <strong>{gameProfile.name}: {selectedCandidate.gameSensitivity.toFixed(3)} at {validDpi} DPI</strong>
                 <p>Set {validDpi} DPI in your mouse app and enter {selectedCandidate.gameSensitivity.toFixed(3)} in {gameProfile.name} yourself. Then go to Phase 2 and practice with this same setting.</p>
-                <a className={styles.primaryButton} href="#phase2">Continue to Phase 2</a>
+                <Link className={styles.primaryButton} href={practiceHref}>Enter the practice range</Link>
               </div>}
               <button className={styles.secondaryButton} onClick={startSweep}>Measure my swipe again</button>
             </section>
@@ -362,11 +408,6 @@ export default function Home() {
           {validDpi && sweepCounts > 0 && phase !== "done" && <p className={styles.resultLine}>{((2 * sweepCounts * 2.54) / validDpi).toFixed(1)} cm swipe · {validDpi} DPI</p>}
         </aside>
       </section>
-      <DrillSuite
-        baselineCounts={practiceBaselineCounts}
-        candidateLabel={selectedCandidate ? `${gameProfile.name} ${selectedCandidate.gameSensitivity.toFixed(3)}` : null}
-        gameDpi={validDpi}
-      />
     </main>
   );
 }
