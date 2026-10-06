@@ -21,7 +21,7 @@ From the repository root, run:
 ```powershell
 docker compose up --build
 ```
-
+.
 Then check:
 
 - Web: <http://localhost:3000>
