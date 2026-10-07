@@ -1,8 +1,12 @@
 # SensLab
 
-<p align="center">
-  <img src="web/public/senslab-wordmark.png" alt="SensLab logo" width="180" />
-</p>
+<table>
+  <tr>
+    <td bgcolor="#f1f4f6">
+      <img src="web/public/senslab-wordmark.png" alt="SensLab logo" width="120" />
+    </td>
+  </tr>
+</table>
 
 ## Project details
 
