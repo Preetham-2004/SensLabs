@@ -16,4 +16,25 @@
 .entry h3 { margin: 0 0 6px; }
 .entry p { margin: 5px 0; color: var(--muted); font-size: 13px; }
 .sectionTitle { margin: 24px 0 12px; }
+.historyPage {
+  --ink: #e7ecf3;
+  --muted: #a9b8ca;
+  --line: #34465c;
+  --paper: #0c1724;
+  --panel: #162337;
+  --green: #a8c1cf;
+  --green-dark: #74aaa6;
+  --accent: #91b4bf;
+  background: radial-gradient(ellipse at 48% -12%, #1b2c40 0%, #111c2a 48%, #0c1724 100%);
+  color: var(--ink);
+}
+.historyPage .entry {
+  border-color: #34495f;
+  background: linear-gradient(145deg, #192a3e, #142033);
+  box-shadow: inset 0 1px 0 #b8d2e00a;
+}
+.historyPage .entry h3, .historyPage .sectionTitle { color: #e8edf4; }
+.historyPage .entry p, .historyPage .top p { color: #b5c3d1; }
+.historyPage .entry p a { color: #91d9e2; }
+.historyPage .top a { color: #a8c1cf; }
 @media (max-width: 600px) { .card { margin: 4vh auto; padding: 22px; } .top { align-items: flex-start; flex-direction: column; } }

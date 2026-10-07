@@ -28,12 +28,16 @@ export default function HistoryPage() {
   useEffect(() => {
     if (loading) return;
     let active = true;
-    const matchesUser = (record: Record<string, any>) => record.ownerId === (user?.id ?? null);
+    if (!user || !token) {
+      setHistory(EMPTY_HISTORY);
+      setBusy(false);
+      return;
+    }
+    const matchesUser = (record: Record<string, any>) => record.ownerId === user.id;
     const local: HistoryData = {
       calibrations: readLocalRecords(LOCAL_CALIBRATIONS_KEY).filter(matchesUser),
       rounds: readLocalRecords(LOCAL_ROUNDS_KEY).filter(matchesUser),
     };
-    if (!token) { setHistory(local); setBusy(false); return; }
     void apiRequest<HistoryData>("/history", token)
       .then((remote) => {
         if (!active) return;
@@ -48,10 +52,10 @@ export default function HistoryPage() {
   }, [loading, token, user?.id]);
 
   return (
-    <main className={styles.page}>
+    <main className={`${styles.page} ${styles.historyPage}`}>
       <div className={styles.wrap}>
         <header className={styles.top}><div><Link href="/">← SensLab</Link><h1>History</h1><p>Your saved calibration and practice rounds.</p></div><AccountLinks /></header>
-        {!user && <section className={styles.entry}><h3>Guest history</h3><p>These records are stored in this browser. <Link href="/signup">Create an account</Link> to keep them with your player profile and sync them after sign-in.</p></section>}
+        {!user && <section className={styles.entry}><h3>Sign in to save your progress</h3><p>Calibration and practice history are saved only to a signed-in gamer account. <Link href="/login">Log in</Link> or <Link href="/signup">create an account</Link> to view your history.</p></section>}
         <h2 className={styles.sectionTitle}>Practice rounds</h2>
         {busy ? <p>Loading history…</p> : history.rounds.length ? <div className={styles.historyList}>
           {history.rounds.map((entry) => {

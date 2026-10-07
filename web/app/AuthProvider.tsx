@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiRequest, TOKEN_KEY } from "../lib/apiClient";
-import { LOCAL_CALIBRATIONS_KEY, LOCAL_ROUNDS_KEY, readLocalPlayerData, readLocalRecords, writeLocalRecords } from "../lib/playerData";
+import { discardGuestData, LOCAL_CALIBRATIONS_KEY, LOCAL_ROUNDS_KEY, readLocalPlayerData, readLocalRecords, writeLocalRecords } from "../lib/playerData";
 
 type User = { id: string; email: string };
 type AuthContextValue = {
@@ -18,12 +18,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 type AuthResponse = { access_token?: string; confirmation_required?: boolean; user?: User };
 type SignedInResponse = { access_token: string; user: User };
 
-async function uploadLocalData(token: string, userId: string, importGuestData = false) {
+async function uploadLocalData(token: string, userId: string) {
   const profile = readLocalPlayerData();
   if (profile && profile.updatedAt > 0) {
     try {
       const remote = await apiRequest<{ data: { updatedAt?: number } | null }>("/profile", token);
-      const profileBelongsToUser = profile.ownerId === userId || (importGuestData && !profile.ownerId);
+      const profileBelongsToUser = profile.ownerId === userId;
       if (profileBelongsToUser && (!remote.data || profile.updatedAt > (remote.data.updatedAt ?? 0))) {
         await apiRequest("/profile", token, { method: "PUT", body: JSON.stringify({ data: profile }) });
       }
@@ -33,7 +33,7 @@ async function uploadLocalData(token: string, userId: string, importGuestData = 
     const records = readLocalRecords(key);
     const remaining = [];
     for (const record of records) {
-      const belongsToUser = record.ownerId === userId || (importGuestData && !record.ownerId);
+      const belongsToUser = record.ownerId === userId;
       if (!belongsToUser) { remaining.push(record); continue; }
       try {
         const payload = endpoint === "/calibrations" ? { id: record.id, data: record.data } : { id: record.id, data: record };
@@ -49,11 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const accept = useCallback(async (response: SignedInResponse, importGuestData: boolean) => {
+  const accept = useCallback(async (response: SignedInResponse) => {
     localStorage.setItem(TOKEN_KEY, response.access_token);
     setToken(response.access_token);
     setUser(response.user);
-    void uploadLocalData(response.access_token, response.user.id, importGuestData);
+    void uploadLocalData(response.access_token, response.user.id);
   }, []);
 
   useEffect(() => {
@@ -71,32 +71,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .catch(() => {
           setToken(null);
           localStorage.removeItem(TOKEN_KEY);
+          discardGuestData();
         })
         .finally(() => setLoading(false));
       return;
     }
 
     const storedToken = localStorage.getItem(TOKEN_KEY);
-    if (!storedToken) { setLoading(false); return; }
+    if (!storedToken) { discardGuestData(); setLoading(false); return; }
     setToken(storedToken);
     apiRequest<User>("/auth/me", storedToken)
       .then((currentUser) => { setUser(currentUser); void uploadLocalData(storedToken, currentUser.id); })
-      .catch(() => { localStorage.removeItem(TOKEN_KEY); setToken(null); })
+      .catch(() => { localStorage.removeItem(TOKEN_KEY); setToken(null); discardGuestData(); })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    await accept(await apiRequest<SignedInResponse>("/auth/login", null, { method: "POST", body: JSON.stringify({ email, password }) }), false);
+    await accept(await apiRequest<SignedInResponse>("/auth/login", null, { method: "POST", body: JSON.stringify({ email, password }) }));
   }, [accept]);
   const signup = useCallback(async (email: string, password: string) => {
     const response = await apiRequest<AuthResponse>("/auth/signup", null, { method: "POST", body: JSON.stringify({ email, password }) });
     if (!response.access_token || !response.user) return false;
-    await accept({ access_token: response.access_token, user: response.user }, true);
+    await accept({ access_token: response.access_token, user: response.user });
     return true;
   }, [accept]);
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("senslab:player-data");
+    discardGuestData();
     setToken(null);
     setUser(null);
   }, []);

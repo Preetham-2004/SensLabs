@@ -28,7 +28,6 @@ type DrillEngineOptions = {
   setPhase: Dispatch<SetStateAction<DrillPhase>>;
   setPoints: Dispatch<SetStateAction<number>>;
   setCountdown: Dispatch<SetStateAction<number>>;
-  setTargetNumber: Dispatch<SetStateAction<number>>;
   setError: Dispatch<SetStateAction<string>>;
 };
 
@@ -44,7 +43,6 @@ export function useDrillEngine({
   setPhase,
   setPoints,
   setCountdown,
-  setTargetNumber,
   setError,
 }: DrillEngineOptions) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -151,7 +149,6 @@ export function useDrillEngine({
         session.startYaw = session.yaw;
         session.startPitch = session.pitch;
         session.spawnTimes.push(now);
-        setTargetNumber(0);
         return;
       }
 
@@ -169,7 +166,6 @@ export function useDrillEngine({
         placeTargetMesh(0, session.targetYaw, session.targetPitch, radius);
       }
       session.spawnTimes.push(now);
-      setTargetNumber(session.targetIndex + 1);
     };
 
     const finish = (now: number) => {
@@ -244,7 +240,6 @@ export function useDrillEngine({
       setAccuracy(Number(((scoreRef.current.hits / scoreRef.current.attempts) * 100).toFixed(1)));
       session.flickAttempts.push({ spawnTime: session.targetStartedAt, time: now, hit, errorDeg, overshootDeg, undershootDeg });
 
-      if (session.flickAttempts.length >= DRILL_CONFIG.precision.targetCount) { finish(now); return; }
       session.targetIndex += 1;
       spawnTarget(session, now);
     };
@@ -329,12 +324,6 @@ export function useDrillEngine({
           setPoints((v) => v + 100);
 
           session.targetIndex += 1;
-          setTargetNumber(session.targetIndex);
-
-          if (session.targetIndex >= DRILL_CONFIG.flick.targetCount) {
-            finish(now);
-            return;
-          }
 
           spawnMultiTargetFlickTarget(session, bestSlotIndex, now);
         } else {
@@ -491,7 +480,15 @@ export function useDrillEngine({
           spawnTarget(session, now);
         }
       } else if (session.phase === "active" && session.type) {
-        if (session.type === "flick") {
+        const durationMs = session.type === "tracking"
+          ? DRILL_CONFIG.tracking.durationMs
+          : session.type === "flick"
+            ? DRILL_CONFIG.flick.durationMs
+            : DRILL_CONFIG.precision.durationMs;
+        const elapsed = now - session.startedAt;
+        if (elapsed >= durationMs) {
+          finish(now);
+        } else if (session.type === "flick") {
           // Render the three active multi-target flick targets across the wide grid.
           for (let i = 0; i < 3; i++) {
             const gt = session.gridTargets[i];
@@ -502,7 +499,6 @@ export function useDrillEngine({
             }
           }
         } else if (session.type === "tracking") {
-          const elapsed = now - session.startedAt;
           updateStrafe(now);
           const path = { yaw: strafe.yaw, pitch: strafe.pitch };
           session.targetYaw = path.yaw;
@@ -531,7 +527,6 @@ export function useDrillEngine({
             }
             lastTrackingScoreUpdate = frameTime;
           }
-          if (elapsed >= DRILL_CONFIG.tracking.durationMs) finish(now);
         } else {
           // Precision mode (Single target)
           placeTargetMesh(
@@ -549,9 +544,7 @@ export function useDrillEngine({
           if (now - session.targetStartedAt >= timeout) recordAttempt(now, true);
         }
 
-        if (session.type === "tracking") {
-          setCountdown(Math.max(0, Math.ceil((DRILL_CONFIG.tracking.durationMs - (now - session.startedAt)) / 1000)));
-        }
+        setCountdown(Math.max(0, Math.ceil((durationMs - elapsed) / 1000)));
       }
 
       if (session.phase === "active") camera.rotation.set(session.pitch, -session.yaw, 0, "YXZ");
@@ -572,7 +565,7 @@ export function useDrillEngine({
       soundEngine.dispose();
       soundEngineRef.current = null;
       scene.traverse((object) => {
-        if (object instanceof THREE.Mesh) {
+        if (object instanceof THREE.Mesh || object instanceof THREE.LineSegments) {
           object.geometry.dispose();
           const materials = Array.isArray(object.material) ? object.material : [object.material];
           materials.forEach((material) => material.dispose());

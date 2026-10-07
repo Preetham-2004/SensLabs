@@ -1,6 +1,6 @@
 export const DRILL_CONFIG = {
   countdownSeconds: 3,
-  flick: { targetCount: 30, targetTimeoutMs: 15000, targetRadiusDeg: 2.0, minAngleDeg: 5, maxAngleDeg: 22 },
+  flick: { durationMs: 30000, targetTimeoutMs: 15000, targetRadiusDeg: 2.0, minAngleDeg: 5, maxAngleDeg: 22 },
   movementStyle: {
     minimumValidFlicks: 10,
     meaningfulGroupShare: 0.2,
@@ -25,5 +25,5 @@ export const DRILL_CONFIG = {
     // Occasional jumps / crouch-peeks for vertical tracking
     jumpChance: 0.2, jumpHeightDeg: 3.5, jumpDurationMs: 520,
   },
-  precision: { targetCount: 20, targetTimeoutMs: 3000, targetRadiusDeg: 0.45, distance: 24, minAngleDeg: 4, maxAngleDeg: 16 },
+  precision: { durationMs: 30000, targetTimeoutMs: 3000, targetRadiusDeg: 0.45, distance: 24, minAngleDeg: 4, maxAngleDeg: 16 },
 } as const;

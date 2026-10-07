@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { DRILL_CONFIG } from "../lib/drillConfig";
 import type { DrillState, DrillType, RoundResult } from "./drill/model";
 import { emptyState } from "./drill/model";
@@ -9,9 +10,9 @@ import { useDrillEngine } from "./drill/useDrillEngine";
 import { replayMovementStyleRecording, type MovementStyleEstimate } from "../lib/metrics/style";
 import styles from "./page.module.css";
 import { useAuth } from "./AuthProvider";
-import AccountLinks from "./AccountLinks";
 import { DEFAULT_PLAYER_DATA, loadPlayerData, rememberRound, savePlayerData, writePlayerDataLocally, type PlayerData } from "../lib/playerData";
 import { apiRequest } from "../lib/apiClient";
+import ReactionTest, { ReactionTestLauncher } from "./ReactionTest";
 
 export default function DrillSuite({
   baselineCounts,
@@ -32,11 +33,11 @@ export default function DrillSuite({
 
   const [phase, setPhase] = useState<DrillState["phase"]>("idle");
   const [panelOpen, setPanelOpen] = useState(false);
+  const [reactionOpen, setReactionOpen] = useState(false);
   const [drillType, setDrillType] = useState<DrillType>("flick");
   const [trackingSpeed, setTrackingSpeed] = useState(0.55);
   const trackingSpeedRef = useRef(0.55);
   const [countdown, setCountdown] = useState(0);
-  const [targetNumber, setTargetNumber] = useState(0);
   const [points, setPoints] = useState(0);
   const [accuracy, setAccuracy] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -62,7 +63,6 @@ export default function DrillSuite({
     setPhase,
     setPoints,
     setCountdown,
-    setTargetNumber,
     setError,
   });
   const { hostRef, cameraRef, stateRef, scoreRef } = engine;
@@ -86,7 +86,7 @@ export default function DrillSuite({
   }, [authLoading, token, user?.id]);
 
   useEffect(() => {
-    if (!preferencesReady) return;
+    if (!preferencesReady || !user || !token) return;
     const preferences = { drillType, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap };
     const current: PlayerData = { ...loadedPlayerData, practice: preferences };
     writePlayerDataLocally(current, user?.id ?? null);
@@ -95,17 +95,16 @@ export default function DrillSuite({
   }, [preferencesReady, loadedPlayerData, token, user?.id, drillType, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap]);
 
   useEffect(() => {
-    if (!result || savedRoundIds.current.has(result.id)) return;
+    if (!result || !user || !token || savedRoundIds.current.has(result.id)) return;
     savedRoundIds.current.add(result.id);
     const record = {
       ...result,
       savedAt: Date.now(),
-      ownerId: user?.id ?? null,
+      ownerId: user.id,
       game: candidateLabel?.split(/[ · ]/)[0] ?? "unknown",
       settings: { candidateLabel, gameDpi, baselineCounts, drillType: result.drill, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap },
     };
     rememberRound(record);
-    if (!token) { setSaveNotice("Saved in this browser. Sign in to keep it with your account."); return; }
     void apiRequest("/rounds", token, { method: "POST", body: JSON.stringify({ id: result.id, data: record }) })
       .then(() => setSaveNotice("Round saved to your account."))
       .catch(() => setSaveNotice("Round saved in this browser. It will sync after sign-in."));
@@ -131,7 +130,6 @@ export default function DrillSuite({
     setPanelOpen(false);
     setError("");
     setCountdown(DRILL_CONFIG.countdownSeconds);
-    setTargetNumber(0);
     setPoints(0);
     setAccuracy(0);
     setPhase("countdown");
@@ -201,36 +199,13 @@ export default function DrillSuite({
 
   return (
     <section className={styles.drillSection} id="phase2" data-phase={phase} data-panel-open={panelOpen}>
-      <nav className={styles.phaseNav} aria-label="App phases">
-        <button
-          className={styles.phaseChip}
-          type="button"
-          onClick={() => {
-            if (document.referrer.startsWith(window.location.origin)) window.history.back();
-            else window.location.assign("/");
-          }}
-        >
-          <em>01</em> Setup
-        </button>
-        <span className={`${styles.phaseChip} ${styles.phaseChipActive}`}>
-          <em>02</em> Practice
-        </span>
-      </nav>
-      <div className={styles.accountNav}><AccountLinks /></div>
       <button className={styles.fullscreenButton} type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
         {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
       </button>
-      <div className={styles.drillIntro}>
-        <span className={styles.logoMark} aria-hidden="true">SL</span>
-        <div>
-          <p className={styles.eyebrow}>Phase 2 · measured drills</p>
-          <h2>Practice and see what happened</h2>
-          <p className={styles.hint}>SensLab training bay <span className={styles.introDivider}>/</span> Tune your reticle, then practice your Phase 1 setting.</p>
-        </div>
-      </div>
       {!panelOpen && phase !== "countdown" && phase !== "active" && (
         <div className={styles.rangeDock}>
-          <span className={styles.rangeDockDrill}>{drillType === "flick" ? "Flick · 30 targets" : drillType === "tracking" ? "Tracking · 20 sec" : "Precision · 20 targets"}</span>
+          <span className={styles.rangeDockDrill}>{drillType === "flick" ? "Flick · 30 sec" : drillType === "tracking" ? "Tracking · 20 sec" : "Precision · 30 sec"}</span>
+          <Link className={styles.dockSensitivityButton} href="/calibrate">Change sensitivity</Link>
           <button className={styles.dockStartButton} type="button" onClick={startRound} disabled={baselineCounts <= 0 || !candidateLabel}>Start</button>
           <button className={styles.dockSettingsButton} type="button" onClick={() => setPanelOpen(true)} aria-expanded={false}>Setup</button>
         </div>
@@ -286,10 +261,11 @@ export default function DrillSuite({
             Choose a drill
           </label>
           <select id="drill" value={drillType} onChange={(event) => setDrillType(event.target.value as DrillType)} disabled={phase === "active" || phase === "countdown"}>
-            <option value="flick">Multi-target flick - 30 targets</option>
+            <option value="flick">Multi-target flick - 30 seconds</option>
             <option value="tracking">Tracking - 20 seconds</option>
-            <option value="precision">Precision - 20 small targets</option>
+            <option value="precision">Precision - 30 seconds · small targets</option>
           </select>
+          <ReactionTestLauncher onLaunch={() => setReactionOpen(true)} />
           {drillType === "tracking" && (
             <label className={styles.inputLabel} htmlFor="tracking-speed">
               Target speed
@@ -321,7 +297,7 @@ export default function DrillSuite({
                 ? `Get ready: ${countdown}`
                 : drillType === "tracking"
                 ? `Track the target - ${countdown} seconds left`
-                : `Target ${targetNumber} of ${drillType === "flick" ? DRILL_CONFIG.flick.targetCount : DRILL_CONFIG.precision.targetCount} - aim and shoot`
+                : `${countdown} seconds left - aim and shoot`
               }
             </p>
           )}
@@ -414,14 +390,14 @@ export default function DrillSuite({
             ))}
           </section>
         )}
-        <p className={styles.hint}>{saveNotice || `Completed rounds in this session: ${history.length}. ${user ? "Rounds are saved to your account." : "Sign in to sync them across devices."}`}</p>
+        <p className={styles.hint}>{saveNotice || `Completed rounds in this session: ${history.length}. ${user ? "Rounds are saved to your account." : "Rounds are not saved while signed out."}`}</p>
       </aside>
       <div className={styles.drillRange} ref={hostRef} aria-label="SensLab measured drill range">
         <div className={styles.drillHud}>
           <div><span>POINTS</span><strong>{points}</strong></div>
           <div><span>ACCURACY</span><strong>{accuracy.toFixed(1)}%</strong></div>
           <div><span>DRILL</span><strong>{phase === "countdown" ? `READY ${countdown}` : drillType.toUpperCase()}</strong></div>
-          <div><span>{drillType === "flick" ? "HITS" : "PROGRESS"}</span><strong>{drillType === "tracking" ? `${countdown}s` : `${targetNumber}/${drillType === "flick" ? DRILL_CONFIG.flick.targetCount : DRILL_CONFIG.precision.targetCount}`}</strong></div>
+          <div><span>TIME LEFT</span><strong>{`${countdown}s`}</strong></div>
         </div>
         <div
           className={styles.drillCrosshair}
@@ -434,6 +410,7 @@ export default function DrillSuite({
         {phase === "idle" && <div className={styles.scenePrompt}>CHOOSE A DRILL AND CLICK START</div>}
         {phase === "countdown" && <div className={styles.scenePrompt}>GET GET READY · {countdown}</div>}
         {phase === "active" && <div className={styles.sceneLabel}>{drillType === "tracking" ? "KEEP YOUR CROSSHAIR ON TARGET" : "AIM AND SHOOT THE TARGETS"}</div>}
+        {reactionOpen && <ReactionTest onClose={() => setReactionOpen(false)} />}
       </div>
     </section>
   );

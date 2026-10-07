@@ -8,32 +8,30 @@ toolGroupRef: MutableRefObject<THREE.Group | null>,
 muzzleFlashMatRef: MutableRefObject<THREE.MeshBasicMaterial | null>,
 targetMeshesRef: MutableRefObject<THREE.Mesh[]>,
 ) {
-  // --- AIMLABS HIGH-VISIBILITY FUTURISTIC TRAINING LAB ---
+  // --- Minimal enclosed practice room ---
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color("#16222f");
-  scene.fog = new THREE.FogExp2("#16222f", 0.018);
+  scene.background = new THREE.Color("#091522");
+  scene.fog = new THREE.FogExp2("#091522", 0.012);
 
   const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
-  camera.position.set(0, 1.65, 6);
+  camera.position.set(0, 1.65, 5.5);
   scene.add(camera);
   cameraRef.current = camera;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.25;
+  renderer.toneMappingExposure = 1.08;
   host.appendChild(renderer.domElement);
 
-  // Ambient & Directional Lighting
-  scene.add(new THREE.AmbientLight(0xe1f0fc, 2.2));
-  const mainLight = new THREE.DirectionalLight(0xffffff, 2.5);
-  mainLight.position.set(-3, 10, 6);
+  scene.add(new THREE.AmbientLight(0xa8c7e2, 1.35));
+  const mainLight = new THREE.DirectionalLight(0xd9efff, 1.8);
+  mainLight.position.set(-3, 11, 4);
   scene.add(mainLight);
 
-  // Target Area Spotlight
-  const spotLight = new THREE.SpotLight(0x00f0ff, 4.5, 45, Math.PI / 2.5, 0.3);
-  spotLight.position.set(0, 9, -4);
-  spotLight.target.position.set(0, 3, -22);
+  const spotLight = new THREE.SpotLight(0x76dfff, 3.2, 42, Math.PI / 2.8, 0.5);
+  spotLight.position.set(0, 10, -5);
+  spotLight.target.position.set(0, 2.5, -24);
   scene.add(spotLight);
   scene.add(spotLight.target);
 
@@ -42,68 +40,84 @@ targetMeshesRef: MutableRefObject<THREE.Mesh[]>,
   gunLight.position.set(0.3, 0.3, -0.2);
   camera.add(gunLight);
 
-  // Floor (Clean Slate Training Floor with Cyan Grid Lines)
-  const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x243342, roughness: 0.5, metalness: 0.4 });
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(44, 46), floorMaterial);
+  const roomWidth = 34;
+  const roomDepth = 40;
+  const roomCenterZ = -13;
+  const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x14283b, roughness: 0.82, metalness: 0.08 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(roomWidth, roomDepth), floorMaterial);
   floor.rotation.x = -Math.PI / 2;
-  floor.position.set(0, -0.02, -8);
+  floor.position.set(0, -0.02, roomCenterZ);
   scene.add(floor);
 
-  // Floor Laser Grid Lines
-  const gridMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
-  for (const x of [-10, -5, 0, 5, 10]) {
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 36), gridMat);
-    line.rotation.x = -Math.PI / 2;
-    line.position.set(x, 0.015, -8);
-    scene.add(line);
-  }
+  // A restrained two-metre floor grid gives the room depth without competing with targets.
+  const floorGrid = new THREE.GridHelper(roomWidth, 17, 0x65b4c5, 0x35556c);
+  floorGrid.position.set(0, 0.012, roomCenterZ);
+  const floorGridMaterials = Array.isArray(floorGrid.material) ? floorGrid.material : [floorGrid.material];
+  floorGridMaterials.forEach((material) => {
+    material.transparent = true;
+    material.opacity = 0.48;
+    material.depthWrite = false;
+  });
+  scene.add(floorGrid);
 
-  // Floor Range Distance Markers
-  const markerMat = new THREE.MeshBasicMaterial({ color: 0xffa500 });
-  for (const z of [-7, -13, -19]) {
-    const line = new THREE.Mesh(new THREE.PlaneGeometry(20, 0.1), markerMat);
-    line.rotation.x = -Math.PI / 2;
-    line.position.set(0, 0.02, z);
-    scene.add(line);
-  }
-
-  // Modern Lab Walls
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x202e3d, roughness: 0.7, metalness: 0.3 });
-  const backWall = new THREE.Mesh(new THREE.BoxGeometry(40, 14, 0.5), wallMaterial);
-  backWall.position.set(0, 7, -24);
+  const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x101f30, roughness: 0.9, metalness: 0.03 });
+  const backWall = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, 14, 0.4), wallMaterial);
+  backWall.position.set(0, 7, -33);
   scene.add(backWall);
 
-  for (const x of [-18, 18]) {
-    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.5, 14, 40), wallMaterial);
-    wall.position.set(x, 7, -8);
+  for (const side of [-1, 1]) {
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 14, roomDepth), wallMaterial);
+    wall.position.set(side * (roomWidth / 2), 7, roomCenterZ);
     scene.add(wall);
   }
 
-  // Columns with LED Strips
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x2b3b4d, roughness: 0.4, metalness: 0.6 });
-  const cyanLightMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
-  const limeLightMat = new THREE.MeshBasicMaterial({ color: 0xb8ff43 });
+  const ceiling = new THREE.Mesh(
+    new THREE.BoxGeometry(roomWidth, 0.3, roomDepth),
+    new THREE.MeshStandardMaterial({ color: 0x0c1826, roughness: 0.95, metalness: 0.02 }),
+  );
+  ceiling.position.set(0, 14, roomCenterZ);
+  scene.add(ceiling);
 
-  for (const x of [-14, 14]) {
-    for (const z of [-6, -14, -22]) {
-      const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.9, 13, 0.9), pillarMat);
-      pillar.position.set(x, 6.5, z);
-      scene.add(pillar);
+  // Fine wall seams echo the floor grid and keep the room visually quiet.
+  const wallGridMaterial = new THREE.LineBasicMaterial({ color: 0x315066, transparent: true, opacity: 0.44 });
+  const backGridPoints: THREE.Vector3[] = [];
+  for (let x = -16; x <= 16; x += 4) {
+    backGridPoints.push(new THREE.Vector3(x, 0, -32.78), new THREE.Vector3(x, 13.8, -32.78));
+  }
+  for (let y = 2; y < 14; y += 2) {
+    backGridPoints.push(new THREE.Vector3(-17, y, -32.78), new THREE.Vector3(17, y, -32.78));
+  }
+  const backGrid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(backGridPoints), wallGridMaterial);
+  scene.add(backGrid);
 
-      const sconce = new THREE.Mesh(new THREE.BoxGeometry(0.12, 5.5, 0.12), (x < 0 ? cyanLightMat : limeLightMat));
-      sconce.position.set(x > 0 ? x - 0.46 : x + 0.46, 6.5, z);
-      scene.add(sconce);
+  for (const side of [-1, 1]) {
+    const points: THREE.Vector3[] = [];
+    const x = side * 16.78;
+    for (let z = -31; z <= 5; z += 4) {
+      points.push(new THREE.Vector3(x, 0, z), new THREE.Vector3(x, 13.8, z));
     }
+    for (let y = 2; y < 14; y += 2) {
+      points.push(new THREE.Vector3(x, y, -33), new THREE.Vector3(x, y, 7));
+    }
+    scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), wallGridMaterial));
   }
 
-  // High-visibility shooting target recessed frame.
-  const framePanel = new THREE.Mesh(new THREE.BoxGeometry(32, 11, 0.2), new THREE.MeshStandardMaterial({ color: 0x1a2634, roughness: 0.4, metalness: 0.5 }));
-  framePanel.position.set(0, 5.5, -23.8);
-  scene.add(framePanel);
+  // Thin cyan-white strips trace the room's upper corners, as in a clean aim range.
+  const edgeLightMaterial = new THREE.MeshBasicMaterial({ color: 0x9be9f2 });
+  for (const side of [-1, 1]) {
+    const edge = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, roomDepth), edgeLightMaterial);
+    edge.position.set(side * 16.72, 13.78, roomCenterZ);
+    scene.add(edge);
+  }
+  const backEdge = new THREE.Mesh(new THREE.BoxGeometry(roomWidth, 0.045, 0.045), edgeLightMaterial);
+  backEdge.position.set(0, 13.78, -32.72);
+  scene.add(backEdge);
 
-  const frameBorder = new THREE.Mesh(new THREE.BoxGeometry(32.5, 11.5, 0.08), cyanLightMat);
-  frameBorder.position.set(0, 5.5, -23.9);
-  scene.add(frameBorder);
+  const centerLaneMaterial = new THREE.MeshBasicMaterial({ color: 0x72cedb, transparent: true, opacity: 0.52 });
+  const centerLane = new THREE.Mesh(new THREE.PlaneGeometry(0.045, roomDepth), centerLaneMaterial);
+  centerLane.rotation.x = -Math.PI / 2;
+  centerLane.position.set(0, 0.02, roomCenterZ);
+  scene.add(centerLane);
 
   // --- Original low-poly sidearm and gloved forearm view model ---
   const tool = new THREE.Group();
