@@ -1,0 +1,4 @@
+.accountLinks { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.accountLinks a, .accountLinks button { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #111b29; color: var(--ink); text-decoration: none; cursor: pointer; }
+.accountLinks a:hover, .accountLinks button:hover { border-color: var(--green-dark); }
+.accountLinks .signUpLink { color: #07110f; background: var(--green-dark); border-color: var(--green-dark); font-weight: 700; }

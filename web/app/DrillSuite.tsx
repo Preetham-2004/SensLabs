@@ -6,17 +6,29 @@ import type { DrillState, DrillType, RoundResult } from "./drill/model";
 import { emptyState } from "./drill/model";
 import { metricLabel, metricValue } from "./drill/metricFormat";
 import { useDrillEngine } from "./drill/useDrillEngine";
+import { replayMovementStyleRecording, type MovementStyleEstimate } from "../lib/metrics/style";
 import styles from "./page.module.css";
+import { useAuth } from "./AuthProvider";
+import AccountLinks from "./AccountLinks";
+import { DEFAULT_PLAYER_DATA, loadPlayerData, rememberRound, savePlayerData, writePlayerDataLocally, type PlayerData } from "../lib/playerData";
+import { apiRequest } from "../lib/apiClient";
 
 export default function DrillSuite({
   baselineCounts,
   candidateLabel,
   gameDpi,
+  conversionVerified,
 }: {
   baselineCounts: number;
   candidateLabel: string | null;
   gameDpi: number | null;
+  conversionVerified: boolean;
 }) {
+  const { user, token, loading: authLoading } = useAuth();
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const [saveNotice, setSaveNotice] = useState("");
+  const [loadedPlayerData, setLoadedPlayerData] = useState<PlayerData>(DEFAULT_PLAYER_DATA);
+  const savedRoundIds = useRef(new Set<string>());
 
   const [phase, setPhase] = useState<DrillState["phase"]>("idle");
   const [panelOpen, setPanelOpen] = useState(false);
@@ -35,6 +47,9 @@ export default function DrillSuite({
   const [result, setResult] = useState<RoundResult | null>(null);
   const [history, setHistory] = useState<RoundResult[]>([]);
   const [error, setError] = useState("");
+  const [replayJson, setReplayJson] = useState("");
+  const [replayEstimate, setReplayEstimate] = useState<MovementStyleEstimate | null>(null);
+  const [replayError, setReplayError] = useState("");
   const engine = useDrillEngine({
     baselineCounts,
     candidateLabel,
@@ -52,6 +67,50 @@ export default function DrillSuite({
   });
   const { hostRef, cameraRef, stateRef, scoreRef } = engine;
 
+  useEffect(() => {
+    if (authLoading) return;
+    let active = true;
+    void loadPlayerData(token, user?.id ?? null).then((data) => {
+      if (!active) return;
+      setLoadedPlayerData(data);
+      setDrillType(data.practice.drillType);
+      setTrackingSpeed(data.practice.trackingSpeed);
+      trackingSpeedRef.current = data.practice.trackingSpeed;
+      setCrosshairShape(data.practice.crosshairShape);
+      setCrosshairColor(data.practice.crosshairColor);
+      setCrosshairSize(data.practice.crosshairSize);
+      setCrosshairGap(data.practice.crosshairGap);
+      setPreferencesReady(true);
+    });
+    return () => { active = false; };
+  }, [authLoading, token, user?.id]);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    const preferences = { drillType, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap };
+    const current: PlayerData = { ...loadedPlayerData, practice: preferences };
+    writePlayerDataLocally(current, user?.id ?? null);
+    const timer = window.setTimeout(() => { void savePlayerData(current, token, user?.id ?? null).catch(() => {}); }, 400);
+    return () => window.clearTimeout(timer);
+  }, [preferencesReady, loadedPlayerData, token, user?.id, drillType, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap]);
+
+  useEffect(() => {
+    if (!result || savedRoundIds.current.has(result.id)) return;
+    savedRoundIds.current.add(result.id);
+    const record = {
+      ...result,
+      savedAt: Date.now(),
+      ownerId: user?.id ?? null,
+      game: candidateLabel?.split(/[ · ]/)[0] ?? "unknown",
+      settings: { candidateLabel, gameDpi, baselineCounts, drillType: result.drill, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap },
+    };
+    rememberRound(record);
+    if (!token) { setSaveNotice("Saved in this browser. Sign in to keep it with your account."); return; }
+    void apiRequest("/rounds", token, { method: "POST", body: JSON.stringify({ id: result.id, data: record }) })
+      .then(() => setSaveNotice("Round saved to your account."))
+      .catch(() => setSaveNotice("Round saved in this browser. It will sync after sign-in."));
+  }, [result, token, user?.id, candidateLabel, gameDpi, baselineCounts, drillType, trackingSpeed, crosshairShape, crosshairColor, crosshairSize, crosshairGap]);
+
 
 
   const startRound = () => {
@@ -67,6 +126,8 @@ export default function DrillSuite({
     cameraRef.current?.rotation.set(0, 0, 0, "YXZ");
     scoreRef.current = { hits: 0, attempts: 0 };
     setResult(null);
+    setReplayEstimate(null);
+    setReplayError("");
     setPanelOpen(false);
     setError("");
     setCountdown(DRILL_CONFIG.countdownSeconds);
@@ -82,6 +143,34 @@ export default function DrillSuite({
     void (canvas as HTMLCanvasElement).requestPointerLock({ unadjustedMovement: true }).catch(() => {
       setError("Click inside the range to capture the mouse. The drill countdown will continue.");
     });
+  };
+
+  const exportLastRound = () => {
+    if (!result?.movementStyleEstimate || result.drill !== "flick") return;
+    const recording = {
+      version: 1,
+      mouseSamples: result.mouseSamples,
+      clickTimes: result.clickTimes,
+      flickAttempts: result.flickAttempts ?? [],
+      dpi: result.gameDpi,
+      cm360: result.cm360,
+    };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(recording, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `senslab-flick-${new Date().toISOString().replaceAll(":", "-")}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+
+  const replayRecording = () => {
+    try {
+      setReplayEstimate(replayMovementStyleRecording(replayJson));
+      setReplayError("");
+    } catch (cause) {
+      setReplayEstimate(null);
+      setReplayError(cause instanceof Error ? cause.message : "Could not replay this recording.");
+    }
   };
 
   const toggleFullscreen = () => {
@@ -127,6 +216,7 @@ export default function DrillSuite({
           <em>02</em> Practice
         </span>
       </nav>
+      <div className={styles.accountNav}><AccountLinks /></div>
       <button className={styles.fullscreenButton} type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
         {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
       </button>
@@ -153,7 +243,9 @@ export default function DrillSuite({
         <div className={styles.drillControls}>
           {candidateLabel && gameDpi !== null && (
             <p className={styles.resultLine}>
-              Selected practice setting: {candidateLabel} at {gameDpi} DPI. Set these values manually in your mouse app and game.
+              Practice starting point: {candidateLabel} at {gameDpi} DPI. {conversionVerified
+                ? "Set the verified game value manually in your mouse app and game."
+                : "The in-game sensitivity conversion is not verified; no game value is provided."}
             </p>
           )}
           <p className={styles.soundNote}>
@@ -194,7 +286,7 @@ export default function DrillSuite({
             Choose a drill
           </label>
           <select id="drill" value={drillType} onChange={(event) => setDrillType(event.target.value as DrillType)} disabled={phase === "active" || phase === "countdown"}>
-            <option value="flick">Flick - 30 targets (Gridshot)</option>
+            <option value="flick">Multi-target flick - 30 targets</option>
             <option value="tracking">Tracking - 20 seconds</option>
             <option value="precision">Precision - 20 small targets</option>
           </select>
@@ -237,7 +329,7 @@ export default function DrillSuite({
           {phase === "countdown" && (
             <p className={styles.hint}>
               {drillType === "flick"
-                ? "Gridshot mode: 3 active targets on wide grid. Shoot a target to instantly respawn it."
+                ? "Multi-target flick: shoot one of three targets to respawn it elsewhere."
                 : drillType === "tracking"
                 ? "Keep your crosshair on the moving target; do not click."
                 : "Micro-adjust onto each distant small target, then click to fire."}
@@ -250,6 +342,32 @@ export default function DrillSuite({
             <p className={styles.step}>
               {result.drill[0].toUpperCase() + result.drill.slice(1)} results - {result.candidateLabel} at {result.gameDpi} DPI
             </p>
+            {result.drill === "flick" && result.movementStyleEstimate && (
+              <div className={styles.movementStyleResult}>
+                <div className={styles.movementStyleComparison}>
+                  <div>
+                    <span>Measured mouse movement · {result.movementStyleEstimate.cm360.toFixed(1)} cm/360</span>
+                    <strong>
+                      {result.movementStyleEstimate.status === "uncalibrated"
+                        ? result.movementStyleEstimate.medianDistanceCm === null
+                          ? "No mouse travel recorded"
+                          : `${result.movementStyleEstimate.medianDistanceCm.toFixed(1)} cm median travel per flick`
+                        : result.movementStyleEstimate.status === "not enough data"
+                        ? "Not enough flicks to summarize"
+                        : `${result.movementStyleEstimate.breakdown!.smallPercent}% small, ${result.movementStyleEstimate.breakdown!.mediumPercent}% medium, ${result.movementStyleEstimate.breakdown!.largePercent}% large`}
+                    </strong>
+                    {result.movementStyleEstimate.status === "uncalibrated" && (
+                      <span>Small, medium, and large categories need real player calibration data.</span>
+                    )}
+                    {result.movementStyleEstimate.breakdown?.mixed && <span>mixed (both small and large movements)</span>}
+                  </div>
+                </div>
+                <p>This is an estimate from your mouse movement, not a guarantee of how you hold the mouse.</p>
+                <small>
+                  Median per flick: {result.movementStyleEstimate.medianDistanceCm?.toFixed(1) ?? "—"} cm · {result.movementStyleEstimate.medianPeakSpeedCmPerSecond?.toFixed(1) ?? "—"} cm/s · {result.movementStyleEstimate.medianCorrections?.toFixed(1) ?? "—"} corrections
+                </small>
+              </div>
+            )}
             {Object.entries(result.metrics).map(([key, value]) => (
               <div className={styles.resultRow} key={key}>
                 <strong>{metricLabel(key)}</strong>
@@ -259,6 +377,24 @@ export default function DrillSuite({
             <p className={styles.hint}>
               Raw data saved in memory for this page session: {result.mouseSamples.length} mouse samples and {result.clickTimes.length} click times.
             </p>
+            {process.env.NODE_ENV === "development" && result.drill === "flick" && (
+              <section className={styles.movementStyleReplay}>
+                <button className={styles.secondaryButton} onClick={exportLastRound}>Export last round as JSON</button>
+                <details>
+                  <summary>Replay a saved flick recording (development)</summary>
+                  <input type="file" accept="application/json,.json" onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (file) setReplayJson(await file.text());
+                  }} />
+                  <textarea aria-label="Flick recording JSON" rows={4} value={replayJson} onChange={(event) => setReplayJson(event.target.value)} placeholder="Or paste exported JSON here" />
+                  <button className={styles.secondaryButton} onClick={replayRecording} disabled={!replayJson.trim()}>Replay estimate</button>
+                  {replayError && <p className={styles.error}>{replayError}</p>}
+                  {replayEstimate && <p className={styles.hint}>Estimate: {replayEstimate.status === "calibrated" && replayEstimate.breakdown
+                    ? `${replayEstimate.breakdown.smallPercent}% small, ${replayEstimate.breakdown.mediumPercent}% medium, ${replayEstimate.breakdown.largePercent}% large`
+                    : replayEstimate.status === "uncalibrated" ? "uncalibrated" : "not enough data"} · {replayEstimate.validFlickCount} flicks · {replayEstimate.cm360.toFixed(1)} cm/360</p>}
+                </details>
+              </section>
+            )}
             <button className={styles.secondaryButton} onClick={() => { setPhase("idle"); setResult(null); setPanelOpen(false); }}>
               Close results
             </button>
@@ -278,7 +414,7 @@ export default function DrillSuite({
             ))}
           </section>
         )}
-        <p className={styles.hint}>Completed rounds kept in this browser session: {history.length}. They are not sent to the API or saved after leaving the page.</p>
+        <p className={styles.hint}>{saveNotice || `Completed rounds in this session: ${history.length}. ${user ? "Rounds are saved to your account." : "Sign in to sync them across devices."}`}</p>
       </aside>
       <div className={styles.drillRange} ref={hostRef} aria-label="SensLab measured drill range">
         <div className={styles.drillHud}>

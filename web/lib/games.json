@@ -1,0 +1,16 @@
+{
+  "cs2": {
+    "name": "CS2",
+    "yawDegreesPerCountAtSensitivityOne": 0.022,
+    "yawVerified": true,
+    "yawSource": "Yaw value supplied in the SensLab request (0.022 degrees/count at sensitivity 1); converter reference linked",
+    "yawSourceUrl": "https://www.kovaak.com/kovaaks/sens-converter"
+  },
+  "valorant": {
+    "name": "VALORANT",
+    "yawDegreesPerCountAtSensitivityOne": 0.07,
+    "yawVerified": true,
+    "yawSource": "Yaw value supplied in the SensLab request (0.07 degrees/count at sensitivity 1); converter reference linked",
+    "yawSourceUrl": "https://www.kovaak.com/kovaaks/sens-converter"
+  }
+}

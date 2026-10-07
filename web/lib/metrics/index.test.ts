@@ -5,9 +5,21 @@ describe("drill metrics with fake mouse-session data", () => {
   it("measures angular error and progress past a flick target", () => {
     expect(angularErrorDegrees(0, 0, Math.PI / 4, 0)).toBeCloseTo(45);
     const progress = forwardProgressRadians(0, 0, Math.PI / 4, 0, Math.PI / 3, 0);
-    expect(calculateFlickErrors(0, 0, Math.PI / 4, 0, Math.PI / 3, 0, progress)).toMatchObject({
-      errorDeg: 15, overshootDeg: 15, undershootDeg: 0,
-    });
+    const errors = calculateFlickErrors(0, 0, Math.PI / 4, 0, Math.PI / 3, 0, progress);
+    expect(errors.errorDeg).toBeCloseTo(15);
+    expect(errors.overshootDeg).toBeCloseTo(15);
+    expect(errors.undershootDeg).toBe(0);
+  });
+
+  it("reports 5 degrees of overshoot, 3 degrees of undershoot, and zero for an exact flick", () => {
+    const overshootProgress = forwardProgressRadians(0, 0, 10 * Math.PI / 180, 0, 15 * Math.PI / 180, 0);
+    expect(calculateFlickErrors(0, 0, 10 * Math.PI / 180, 0, 15 * Math.PI / 180, 0, overshootProgress).overshootDeg).toBeCloseTo(5);
+
+    const undershootProgress = forwardProgressRadians(0, 0, 10 * Math.PI / 180, 0, 7 * Math.PI / 180, 0);
+    expect(calculateFlickErrors(0, 0, 10 * Math.PI / 180, 0, 7 * Math.PI / 180, 0, undershootProgress).undershootDeg).toBeCloseTo(3);
+
+    const exactProgress = forwardProgressRadians(0, 0, 10 * Math.PI / 180, 0, 10 * Math.PI / 180, 0);
+    expect(calculateFlickErrors(0, 0, 10 * Math.PI / 180, 0, 10 * Math.PI / 180, 0, exactProgress)).toMatchObject({ overshootDeg: 0, undershootDeg: 0 });
   });
 
   it("calculates flick hit rate, time, misses, and errors", () => {

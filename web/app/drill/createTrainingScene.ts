@@ -96,7 +96,7 @@ targetMeshesRef: MutableRefObject<THREE.Mesh[]>,
     }
   }
 
-  // High-Visibility Shooting Target Recessed Frame (Wider for Arm/Wrist Gridshot)
+  // High-visibility shooting target recessed frame.
   const framePanel = new THREE.Mesh(new THREE.BoxGeometry(32, 11, 0.2), new THREE.MeshStandardMaterial({ color: 0x1a2634, roughness: 0.4, metalness: 0.5 }));
   framePanel.position.set(0, 5.5, -23.8);
   scene.add(framePanel);

@@ -1,6 +1,12 @@
 export const DRILL_CONFIG = {
   countdownSeconds: 3,
   flick: { targetCount: 30, targetTimeoutMs: 15000, targetRadiusDeg: 2.0, minAngleDeg: 5, maxAngleDeg: 22 },
+  movementStyle: {
+    minimumValidFlicks: 10,
+    meaningfulGroupShare: 0.2,
+    // Set only by scripts/calibrate-style.ts after real player data is collected.
+    distanceCutoffsCm: null as { smallMaxCm: number; mediumMaxCm: number } | null,
+  },
   tracking: {
     durationMs: 20000, targetRadiusDeg: 2.2,
     speedLevels: [

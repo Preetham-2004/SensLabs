@@ -1,7 +1,9 @@
 import { DRILL_CONFIG } from "../../lib/drillConfig";
 import type { FlickAttempt, MouseSample, TrackingObservation } from "../../lib/metrics";
+import type { MovementStyleEstimate } from "../../lib/metrics/style";
 export type DrillType = "flick" | "tracking" | "precision";
 export type RoundResult = {
+  id: string;
   drill: DrillType;
   candidateLabel: string;
   gameDpi: number;
@@ -9,6 +11,9 @@ export type RoundResult = {
   endedAt: number;
   mouseSamples: MouseSample[];
   clickTimes: number[];
+  cm360?: number;
+  flickAttempts?: FlickAttempt[];
+  movementStyleEstimate?: MovementStyleEstimate;
   metrics: Record<string, number>;
 };
 
@@ -17,6 +22,8 @@ export type GridTarget = {
   yaw: number;
   pitch: number;
   spawnTime: number;
+  startYaw: number;
+  startPitch: number;
 };
 
 export type DrillState = {
@@ -45,8 +52,8 @@ export type DrillState = {
 export const radians = Math.PI / 180;
 export const sessionSafeTargetRadius = (radiusDeg: number) => radiusDeg < 1 ? 1.5 : 2.0;
 
-// 24 Widespread Spatial Grid Nodes for Aimlabs Gridshot (4 Rows x 6 Columns)
-// Spans -20° to +20° horizontally and +1.5° to +12.0° vertically for real arm/wrist flick training
+// 24 wide spatial grid nodes for the multi-target flick drill (4 rows x 6 columns).
+// Spans -20° to +20° horizontally and +1.5° to +12.0° vertically.
 export const GRID_NODES = [
   // Row 0 (Low)
   { yaw: -20 * radians, pitch: 1.5 * radians },

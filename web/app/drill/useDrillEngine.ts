@@ -11,6 +11,7 @@ import {
   calculateTrackingMetrics,
   forwardProgressRadians,
 } from "../../lib/metrics";
+import { calculateMovementStyle } from "../../lib/metrics/style";
 import { emptyState, sessionSafeTargetRadius, SoundEngine, targetAngles, GRID_NODES, radians, type DrillState, type GridTarget, type RoundResult } from "./model";
 import { createTrainingScene } from "./createTrainingScene";
 
@@ -109,8 +110,8 @@ export function useDrillEngine({
       targetMesh.visible = true;
     };
 
-    // Helper: Select an unoccupied Grid Node from 24 Widespread Nodes
-    const spawnGridshotTarget = (session: DrillState, slotIndex: number, now: number) => {
+    // Helper: select an unoccupied grid node from the multi-target flick layout.
+    const spawnMultiTargetFlickTarget = (session: DrillState, slotIndex: number, now: number) => {
       const occupiedIndices = new Set(session.gridTargets.map((gt) => gt.gridIndex));
       const availableIndices: number[] = [];
       for (let i = 0; i < GRID_NODES.length; i++) {
@@ -126,6 +127,8 @@ export function useDrillEngine({
         yaw: node.yaw,
         pitch: node.pitch,
         spawnTime: now,
+        startYaw: session.yaw,
+        startPitch: session.pitch,
       };
 
       if (slotIndex >= 0 && slotIndex < session.gridTargets.length) {
@@ -139,11 +142,11 @@ export function useDrillEngine({
       if (!session.type) return;
 
       if (session.type === "flick") {
-        // Gridshot mode: 3 simultaneous targets on widespread 24-node grid
+        // Multi-target flick mode: three simultaneous targets on the wide grid.
         session.gridTargets = [];
-        spawnGridshotTarget(session, 0, now);
-        spawnGridshotTarget(session, 1, now);
-        spawnGridshotTarget(session, 2, now);
+        spawnMultiTargetFlickTarget(session, 0, now);
+        spawnMultiTargetFlickTarget(session, 1, now);
+        spawnMultiTargetFlickTarget(session, 2, now);
         session.targetStartedAt = now;
         session.startYaw = session.yaw;
         session.startPitch = session.pitch;
@@ -185,7 +188,21 @@ export function useDrillEngine({
       }
       setAccuracy(Number((metrics.hitRatePercent ?? metrics.onTargetPercent ?? 0).toFixed(1)));
 
+      const cm360 = currentGameDpi && currentBaselineCounts > 0
+        ? (2 * currentBaselineCounts * 2.54) / currentGameDpi
+        : null;
+      const movementStyleEstimate = session.type === "flick" && cm360 !== null
+        ? calculateMovementStyle({
+            mouseSamples: session.mouseSamples,
+            clickTimes: session.clickTimes,
+            flickAttempts: session.flickAttempts,
+            dpi: currentGameDpi!,
+            cm360,
+          })
+        : undefined;
+
       const round: RoundResult = {
+        id: crypto.randomUUID(),
         drill: session.type,
         candidateLabel: currentCandidateLabel ?? "Unknown setting",
         gameDpi: currentGameDpi ?? 0,
@@ -193,6 +210,11 @@ export function useDrillEngine({
         endedAt: now,
         mouseSamples: [...session.mouseSamples],
         clickTimes: [...session.clickTimes],
+        ...(cm360 !== null ? { cm360 } : {}),
+        ...(session.type === "flick" ? {
+          flickAttempts: [...session.flickAttempts],
+        } : {}),
+        ...(movementStyleEstimate ? { movementStyleEstimate } : {}),
         metrics,
       };
 
@@ -244,6 +266,20 @@ export function useDrillEngine({
       }
     };
 
+    const flickErrorsForTarget = (session: DrillState, target: GridTarget, now: number) => {
+      let farthestProgress = 0;
+      for (const sample of session.mouseSamples) {
+        if (sample.time < target.spawnTime || sample.time > now) continue;
+        farthestProgress = Math.max(farthestProgress, forwardProgressRadians(
+          target.startYaw, target.startPitch, target.yaw, target.pitch, sample.yaw, sample.pitch,
+        ));
+      }
+      return calculateFlickErrors(
+        target.startYaw, target.startPitch, target.yaw, target.pitch,
+        session.yaw, session.pitch, farthestProgress,
+      );
+    };
+
     const triggerGunRecoil = () => {
       soundEngine.playFire();
 
@@ -267,7 +303,7 @@ export function useDrillEngine({
 
       triggerGunRecoil();
 
-      // AIMLABS GRIDSHOT FLICK DRILL CLICK LOGIC
+      // Multi-target flick drill click logic.
       if (session.type === "flick") {
         let bestSlotIndex = -1;
         let minErrorDeg = Infinity;
@@ -287,7 +323,8 @@ export function useDrillEngine({
           // HIT! Respawn target at another open grid node
           soundEngine.playHit();
           const hitTarget = session.gridTargets[bestSlotIndex];
-          session.flickAttempts.push({ spawnTime: hitTarget.spawnTime, time: now, hit: true, errorDeg: minErrorDeg, overshootDeg: 0, undershootDeg: 0 });
+          const flickErrors = flickErrorsForTarget(session, hitTarget, now);
+          session.flickAttempts.push({ spawnTime: hitTarget.spawnTime, time: now, hit: true, ...flickErrors });
           scoreRef.current.hits += 1;
           setPoints((v) => v + 100);
 
@@ -299,18 +336,18 @@ export function useDrillEngine({
             return;
           }
 
-          spawnGridshotTarget(session, bestSlotIndex, now);
+          spawnMultiTargetFlickTarget(session, bestSlotIndex, now);
         } else {
           // MISS!
           soundEngine.playMiss();
           const nearestTarget = session.gridTargets[bestSlotIndex];
+          if (!nearestTarget) return;
+          const flickErrors = flickErrorsForTarget(session, nearestTarget, now);
           session.flickAttempts.push({
-            spawnTime: nearestTarget?.spawnTime ?? now,
+            spawnTime: nearestTarget.spawnTime,
             time: now,
             hit: false,
-            errorDeg: Number.isFinite(minErrorDeg) ? minErrorDeg : 0,
-            overshootDeg: 0,
-            undershootDeg: 0,
+            ...flickErrors,
           });
           setPoints((v) => v - 100);
         }
@@ -455,7 +492,7 @@ export function useDrillEngine({
         }
       } else if (session.phase === "active" && session.type) {
         if (session.type === "flick") {
-          // Render 3 Active Gridshot Targets across 24 Widespread Nodes
+          // Render the three active multi-target flick targets across the wide grid.
           for (let i = 0; i < 3; i++) {
             const gt = session.gridTargets[i];
             if (gt) {
