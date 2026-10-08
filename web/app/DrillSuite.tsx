@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { DRILL_CONFIG } from "../lib/drillConfig";
 import type { DrillState, DrillType, RoundResult } from "./drill/model";
 import { emptyState } from "./drill/model";
 import { metricLabel, metricValue } from "./drill/metricFormat";
 import { useDrillEngine } from "./drill/useDrillEngine";
-import { replayMovementStyleRecording, type MovementStyleEstimate } from "../lib/metrics/style";
 import styles from "./page.module.css";
 import { useAuth } from "./AuthProvider";
 import { DEFAULT_PLAYER_DATA, loadPlayerData, rememberRound, savePlayerData, writePlayerDataLocally, type PlayerData } from "../lib/playerData";
 import { apiRequest } from "../lib/apiClient";
 import ReactionTest, { ReactionTestLauncher } from "./ReactionTest";
+import reactionStyles from "./reaction.module.css";
 
 export default function DrillSuite({
   baselineCounts,
@@ -48,9 +49,6 @@ export default function DrillSuite({
   const [result, setResult] = useState<RoundResult | null>(null);
   const [history, setHistory] = useState<RoundResult[]>([]);
   const [error, setError] = useState("");
-  const [replayJson, setReplayJson] = useState("");
-  const [replayEstimate, setReplayEstimate] = useState<MovementStyleEstimate | null>(null);
-  const [replayError, setReplayError] = useState("");
   const engine = useDrillEngine({
     baselineCounts,
     candidateLabel,
@@ -125,8 +123,6 @@ export default function DrillSuite({
     cameraRef.current?.rotation.set(0, 0, 0, "YXZ");
     scoreRef.current = { hits: 0, attempts: 0 };
     setResult(null);
-    setReplayEstimate(null);
-    setReplayError("");
     setPanelOpen(false);
     setError("");
     setCountdown(DRILL_CONFIG.countdownSeconds);
@@ -138,37 +134,7 @@ export default function DrillSuite({
         setError("Fullscreen was blocked. Use the expand control to enter fullscreen.");
       });
     }
-    void (canvas as HTMLCanvasElement).requestPointerLock({ unadjustedMovement: true }).catch(() => {
-      setError("Click inside the range to capture the mouse. The drill countdown will continue.");
-    });
-  };
-
-  const exportLastRound = () => {
-    if (!result?.movementStyleEstimate || result.drill !== "flick") return;
-    const recording = {
-      version: 1,
-      mouseSamples: result.mouseSamples,
-      clickTimes: result.clickTimes,
-      flickAttempts: result.flickAttempts ?? [],
-      dpi: result.gameDpi,
-      cm360: result.cm360,
-    };
-    const url = URL.createObjectURL(new Blob([JSON.stringify(recording, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `senslab-flick-${new Date().toISOString().replaceAll(":", "-")}.json`;
-    link.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 0);
-  };
-
-  const replayRecording = () => {
-    try {
-      setReplayEstimate(replayMovementStyleRecording(replayJson));
-      setReplayError("");
-    } catch (cause) {
-      setReplayEstimate(null);
-      setReplayError(cause instanceof Error ? cause.message : "Could not replay this recording.");
-    }
+    void (canvas as HTMLCanvasElement).requestPointerLock({ unadjustedMovement: true }).catch(() => {});
   };
 
   const toggleFullscreen = () => {
@@ -198,7 +164,13 @@ export default function DrillSuite({
   }, [phase]);
 
   return (
-    <section className={styles.drillSection} id="phase2" data-phase={phase} data-panel-open={panelOpen}>
+    <section className={styles.drillSection} id="phase2" data-phase={phase} data-panel-open={panelOpen} data-reaction-open={reactionOpen}>
+      <nav className={styles.topBar} aria-label="SensLab navigation">
+        <Link className={styles.topBarBrand} href="/" aria-label="SensLab home"><Image className={styles.topBarLogo} src="/senslab-minimal-logo.png" alt="" width={38} height={30} /></Link>
+        <Link className={styles.topBarLink} href="/calibrate"><em>01</em> Calibrate</Link>
+        <Link className={`${styles.topBarLink} ${styles.topBarLinkActive}`} href="/practice" aria-current="page"><em>02</em> Practice</Link>
+        <Link className={styles.topBarLink} href="/history">History</Link>
+      </nav>
       <button className={styles.fullscreenButton} type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}>
         {isFullscreen ? "Exit fullscreen" : "Fullscreen"}
       </button>
@@ -224,10 +196,14 @@ export default function DrillSuite({
             </p>
           )}
           <p className={styles.soundNote}>
-            <span className={styles.soundHit}>●</span> Hit sound <span className={styles.soundMiss}>●</span> Miss sound
+            <span className={styles.soundHit} aria-hidden="true" /> Hit sound <span className={styles.soundMiss} aria-hidden="true" /> Miss sound
           </p>
           <details className={styles.crosshairSettings}>
-            <summary>Customize your crosshair</summary>
+            <summary>
+              <span className={styles.crosshairSummaryIcon} aria-hidden="true" />
+              <span className={styles.crosshairSummaryText}>Customize your crosshair<small>Shape, color and size</small></span>
+              <span className={styles.crosshairSummaryToggle} aria-hidden="true" />
+            </summary>
             <div className={styles.crosshairControls}>
               <label>
                 Shape
@@ -249,7 +225,7 @@ export default function DrillSuite({
               </label>
               <label>
                 Size <strong>{crosshairSize}px</strong>
-                <input type="range" min="12" max="36" value={crosshairSize} onChange={(event) => setCrosshairSize(Number(event.target.value))} />
+                <input type="range" min="8" max="48" value={crosshairSize} onChange={(event) => setCrosshairSize(Number(event.target.value))} />
               </label>
               <label>
                 Gap <strong>{crosshairGap}px</strong>
@@ -347,30 +323,15 @@ export default function DrillSuite({
             {Object.entries(result.metrics).map(([key, value]) => (
               <div className={styles.resultRow} key={key}>
                 <strong>{metricLabel(key)}</strong>
-                <span>{metricValue(key, value)}</span>
+                <span>{result.drill === "precision" && key === "meanTimeToHitMs" ? `${value.toFixed(0)} ms` : metricValue(key, value)}</span>
               </div>
             ))}
+            {result.drill === "flick" && (
+              <p className={styles.hint}>The first number shows how far your aim went past a target. The second shows how far it stopped short. Smaller numbers mean closer aim.</p>
+            )}
             <p className={styles.hint}>
               Raw data saved in memory for this page session: {result.mouseSamples.length} mouse samples and {result.clickTimes.length} click times.
             </p>
-            {process.env.NODE_ENV === "development" && result.drill === "flick" && (
-              <section className={styles.movementStyleReplay}>
-                <button className={styles.secondaryButton} onClick={exportLastRound}>Export last round as JSON</button>
-                <details>
-                  <summary>Replay a saved flick recording (development)</summary>
-                  <input type="file" accept="application/json,.json" onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (file) setReplayJson(await file.text());
-                  }} />
-                  <textarea aria-label="Flick recording JSON" rows={4} value={replayJson} onChange={(event) => setReplayJson(event.target.value)} placeholder="Or paste exported JSON here" />
-                  <button className={styles.secondaryButton} onClick={replayRecording} disabled={!replayJson.trim()}>Replay estimate</button>
-                  {replayError && <p className={styles.error}>{replayError}</p>}
-                  {replayEstimate && <p className={styles.hint}>Estimate: {replayEstimate.status === "calibrated" && replayEstimate.breakdown
-                    ? `${replayEstimate.breakdown.smallPercent}% small, ${replayEstimate.breakdown.mediumPercent}% medium, ${replayEstimate.breakdown.largePercent}% large`
-                    : replayEstimate.status === "uncalibrated" ? "uncalibrated" : "not enough data"} · {replayEstimate.validFlickCount} flicks · {replayEstimate.cm360.toFixed(1)} cm/360</p>}
-                </details>
-              </section>
-            )}
             <button className={styles.secondaryButton} onClick={() => { setPhase("idle"); setResult(null); setPanelOpen(false); }}>
               Close results
             </button>
@@ -402,15 +363,19 @@ export default function DrillSuite({
         <div
           className={styles.drillCrosshair}
           data-shape={crosshairShape}
-          style={{ "--crosshair-color": crosshairColor, "--crosshair-size": `${crosshairSize}px`, "--crosshair-gap": `${crosshairGap}px` } as CSSProperties}
+          style={{ "--crosshair-color": crosshairColor, "--crosshair-size": `${crosshairSize}px`, "--crosshair-gap": `${crosshairGap}px`, "--crosshair-dot-size": `${Math.max(3, Math.round(crosshairSize / 4))}px` } as CSSProperties}
           aria-hidden="true"
         >
           <span /><span /><span /><span /><span />
         </div>
-        {phase === "idle" && <div className={styles.scenePrompt}>CHOOSE A DRILL AND CLICK START</div>}
+        {phase === "idle" && <div className={styles.scenePrompt}>CLICK SETUP, CHOOSE A DRILL, THEN CLICK START</div>}
         {phase === "countdown" && <div className={styles.scenePrompt}>GET GET READY · {countdown}</div>}
         {phase === "active" && <div className={styles.sceneLabel}>{drillType === "tracking" ? "KEEP YOUR CROSSHAIR ON TARGET" : "AIM AND SHOOT THE TARGETS"}</div>}
-        {reactionOpen && <ReactionTest onClose={() => setReactionOpen(false)} />}
+        {reactionOpen && (
+          <div className={reactionStyles.reactionScene}>
+            <ReactionTest onClose={() => setReactionOpen(false)} />
+          </div>
+        )}
       </div>
     </section>
   );

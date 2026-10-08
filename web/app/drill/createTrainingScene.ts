@@ -173,7 +173,6 @@ targetMeshesRef: MutableRefObject<THREE.Mesh[]>,
   // Trigger guard and trigger.
   addWeaponPart(new THREE.TorusGeometry(0.067, 0.012, 6, 14), frameMat, [0.078, -0.045, -0.13], [0, Math.PI / 2, 0]);
   addWeaponPart(new THREE.CapsuleGeometry(0.009, 0.06, 3, 6), sightMat, [0.073, -0.04, -0.13], [0, 0, -0.18]);
-
   // Textured rubber grip slopes down and back toward the hand.
   addWeaponPart(new THREE.BoxGeometry(0.14, 0.29, 0.16), gripMat, [0, -0.16, 0.055], [-0.2, 0, 0]);
   for (let index = 0; index < 5; index += 1) {

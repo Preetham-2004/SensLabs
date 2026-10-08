@@ -1,4 +1,10 @@
 .accountLinks { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
-.accountLinks a, .accountLinks button { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #111b29; color: var(--ink); text-decoration: none; cursor: pointer; }
+.accountLinks a, .accountLinks button { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #13101e; color: var(--ink); text-decoration: none; cursor: pointer; }
 .accountLinks a:hover, .accountLinks button:hover { border-color: var(--green-dark); }
-.accountLinks .signUpLink { color: #07110f; background: var(--green-dark); border-color: var(--green-dark); font-weight: 700; }
+.accountLinks .signUpLink { color: #080611; background: var(--green-dark); border-color: var(--green-dark); font-weight: 700; }
+
+/* Obsidian & Volt */
+.accountLinks a, .accountLinks button { border-color: #2b2a47; background: #15142b; color: var(--ink); font-weight: 600; transition: border-color .2s ease, background .2s ease, transform .2s ease; }
+.accountLinks a:hover, .accountLinks button:hover { border-color: var(--iris); background: #1d1b3d; transform: translateY(-1px); }
+.accountLinks .signUpLink { border-color: transparent; background: var(--volt); color: var(--volt-ink); }
+.accountLinks .signUpLink:hover { background: #d6ff6b; }

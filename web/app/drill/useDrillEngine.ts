@@ -180,7 +180,7 @@ export function useDrillEngine({
       } else if (session.type === "tracking") {
         metrics = { ...calculateTrackingMetrics(session.observations) };
       } else {
-        metrics = { ...calculatePrecisionMetrics(session.flickAttempts.map(({ time, hit, errorDeg }) => ({ time, hit, errorDeg })), session.spawnTimes) };
+        metrics = { ...calculatePrecisionMetrics(session.flickAttempts, session.spawnTimes) };
       }
       setAccuracy(Number((metrics.hitRatePercent ?? metrics.onTargetPercent ?? 0).toFixed(1)));
 
@@ -238,7 +238,15 @@ export function useDrillEngine({
       if (hit) scoreRef.current.hits += 1;
       setPoints((value) => value + (hit ? 100 : -100));
       setAccuracy(Number(((scoreRef.current.hits / scoreRef.current.attempts) * 100).toFixed(1)));
-      session.flickAttempts.push({ spawnTime: session.targetStartedAt, time: now, hit, errorDeg, overshootDeg, undershootDeg });
+      session.flickAttempts.push({
+        spawnTime: session.targetStartedAt,
+        time: now,
+        timeToHitMs: hit ? Math.max(0, now - session.targetStartedAt) : 0,
+        hit,
+        errorDeg,
+        overshootDeg,
+        undershootDeg,
+      });
 
       session.targetIndex += 1;
       spawnTarget(session, now);
@@ -347,25 +355,15 @@ export function useDrillEngine({
       recordAttempt(now);
     };
 
-    const onLockChange = () => {
-      if (document.pointerLockElement !== canvas) {
-        const session = stateRef.current;
-        if (session.phase === "active") setError("Mouse released. Click the range to capture it again or press Esc to stop.");
-      }
-    };
-
     const onCanvasClick = () => {
       if (stateRef.current.phase !== "countdown" && stateRef.current.phase !== "active") return;
       if (document.pointerLockElement === canvas) return;
-      void canvas.requestPointerLock({ unadjustedMovement: true }).catch(() => {
-        setError("Mouse capture was blocked. Click inside the range again to allow mouse control.");
-      });
+      void canvas.requestPointerLock({ unadjustedMovement: true }).catch(() => {});
     };
 
     canvas.addEventListener("mousemove", onMouseMove);
     canvas.addEventListener("click", onTargetClick);
     canvas.addEventListener("click", onCanvasClick);
-    document.addEventListener("pointerlockchange", onLockChange);
 
     // --- FPS-STYLE STRAFE SIMULATOR (tracking drill) ---
     // Mimics an enemy doing A/D strafes: quick direction changes, varied speeds,
@@ -560,7 +558,6 @@ export function useDrillEngine({
       canvas.removeEventListener("mousemove", onMouseMove);
       canvas.removeEventListener("click", onTargetClick);
       canvas.removeEventListener("click", onCanvasClick);
-      document.removeEventListener("pointerlockchange", onLockChange);
       if (document.pointerLockElement === canvas) document.exitPointerLock();
       soundEngine.dispose();
       soundEngineRef.current = null;

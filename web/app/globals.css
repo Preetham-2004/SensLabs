@@ -1,53 +1,79 @@
+/* SensLab brand system — "Obsidian & Volt"
+   Neutrals: deep indigo-black surfaces.
+   Iris (#8b7cff) = information / structure. Volt (#c6ff3d) = the one thing to click next. */
 :root {
   color-scheme: dark;
-  --ink: #f0f6f4;
-  --muted: #8ea39b;
-  --line: #2a3b38;
-  --paper: #0a0f0e;
-  --panel: #10191a;
-  --green: #00ffc8;
-  --green-dark: #00d4a6;
-  --accent: #ffa726;
-  --glass: #0f1817d4;
-  --glow: #00ffc840;
+
+  --paper: #0b0a14;
+  --panel: #12111f;
+  --raised: #181730;
+  --line: #2b2a47;
+  --line-soft: #1f1e36;
+
+  --ink: #f2f1fb;
+  --muted: #a9a7c6;
+  --faint: #6f6d93;
+
+  --iris: #8b7cff;
+  --iris-soft: #b3a9ff;
+  --volt: #c6ff3d;
+  --volt-ink: #11140a;
+  --ember: #ff7a59;
+
+  /* legacy aliases used across the existing CSS modules */
+  --green: var(--iris-soft);
+  --green-dark: var(--iris);
+  --accent: var(--volt);
+  --glass: #12111fd9;
+  --glow: #8b7cff33;
+
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --radius: 14px;
 }
 
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 html, body { margin: 0; min-height: 100%; }
 body {
   background:
-    radial-gradient(1200px 500px at 12% -10%, #183830 0%, transparent 55%),
-    radial-gradient(900px 420px at 100% 0%, #1d2e1f 0%, transparent 48%),
+    radial-gradient(1100px 520px at 10% -12%, #2a1f6455 0%, transparent 60%),
+    radial-gradient(800px 420px at 100% 0%, #c6ff3d10 0%, transparent 55%),
     var(--paper);
+  background-attachment: fixed;
   color: var(--ink);
-  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  opacity: 0.015;
-  background:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(255,255,255,0.03) 2px,
-      rgba(255,255,255,0.03) 4px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent,
-      transparent 2px,
-      rgba(255,255,255,0.04) 2px,
-      rgba(255,255,255,0.04) 4px
-    );
+h1, h2, h3, h4 {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -.035em;
 }
-button, input, select { font: inherit; }
+button, input, select, textarea { font: inherit; }
+a { transition: color .2s var(--ease-out); }
+
 button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible, summary:focus-visible {
-  outline: 2px solid var(--green);
+  outline: 2px solid var(--volt);
   outline-offset: 3px;
 }
-::selection { background: var(--green); color: #07110f; }
+::selection { background: var(--volt); color: var(--volt-ink); }
+
+/* thin, branded scrollbars */
+* { scrollbar-width: thin; scrollbar-color: #3a3860 transparent; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 99px; background: #3a3860 content-box; }
+::-webkit-scrollbar-thumb:hover { background: #55528a content-box; }
+
+/* shared motion primitives (used by every page) */
+@keyframes sl-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes sl-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sl-pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes sl-pulse { 0%, 100% { box-shadow: 0 0 0 0 #c6ff3d55; } 60% { box-shadow: 0 0 0 10px #c6ff3d00; } }
+@keyframes sl-sheen { from { transform: translateX(-120%) skewX(-18deg); } to { transform: translateX(260%) skewX(-18deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import * as THREE from "three";
 import { motion, useReducedMotion } from "motion/react";
 import { GAME_PROFILES, type GameId } from "../../lib/gameProfiles";
@@ -33,6 +34,7 @@ export default function Home() {
   const dpiReadingsRef = useRef<number[]>([]);
   const swipeReadingsRef = useRef<number[]>([]);
   const captureMouseRef = useRef<() => void>(() => {});
+  const captureArmedRef = useRef(false);
   const [phase, setPhase] = useState<Phase>("setup");
   const [selectedGame, setSelectedGame] = useState<GameId>("cs2");
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
@@ -54,6 +56,15 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState("");
   const [calibrationId, setCalibrationId] = useState<string | null>(null);
 
+  const armCaptureGuide = () => {
+    captureArmedRef.current = true;
+    setImmersiveCapture(true);
+  };
+  const disarmCaptureGuide = () => {
+    captureArmedRef.current = false;
+    setImmersiveCapture(false);
+  };
+
   useEffect(() => {
     if (authLoading) return;
     let active = true;
@@ -68,7 +79,7 @@ export default function Home() {
       setPhase(restoredPhase);
       sessionRef.current.phase = restoredPhase;
       sessionRef.current.sweepCounts = saved.sweepCounts;
-      setSelectedGame(saved.selectedGame);
+      setSelectedGame(data.updatedAt === 0 && user?.preferred_game ? user.preferred_game : saved.selectedGame);
       setSelectedCandidateId(restoredPhase === "done" ? saved.selectedCandidateId : null);
       setSensitivityAdjustmentSteps(saved.sensitivityAdjustmentSteps);
       setDpiChoice(saved.dpiChoice);
@@ -227,9 +238,9 @@ export default function Home() {
     };
 
     const saveDpiSwipe = (counts: number) => {
-      setImmersiveCapture(false);
+      disarmCaptureGuide();
       if (counts < 20) {
-        setErrorMessage("That swipe was too short to measure. Start again and move one full card length.");
+        setErrorMessage("That movement was too short. Try again and move your mouse the full length of the card.");
         setPhase("setup");
         sessionRef.current.phase = "setup";
         return;
@@ -255,7 +266,7 @@ export default function Home() {
     };
 
     const finishSweep = () => {
-      setImmersiveCapture(false);
+      disarmCaptureGuide();
       const session = sessionRef.current;
       const count = Math.round(session.sweepCounts);
       if (count < 30) {
@@ -275,7 +286,7 @@ export default function Home() {
         session.sweepCounts = 0;
         setSweepCounts(0);
         setErrorMessage("");
-        setMessage(`Swipe ${nextReadings.length} of 3 captured. Return your mouse to the starting edge, then start swipe ${nextReadings.length + 1}.`);
+        setMessage(`Swipe ${nextReadings.length} of 3 saved. Return your mouse to the starting edge, then click anywhere to begin swipe ${nextReadings.length + 1}.`);
         return;
       }
       const medianCounts = [...nextReadings].sort((a, b) => a - b)[1];
@@ -293,7 +304,11 @@ export default function Home() {
       const isLocked = document.pointerLockElement === canvas;
       setLocked(isLocked);
       const session = sessionRef.current;
-      if (isLocked) return;
+      if (isLocked) {
+        captureArmedRef.current = false;
+        return;
+      }
+      captureArmedRef.current = false;
       if (session.phase === "sweep") finishSweep();
       else if (session.phase === "dpi") saveDpiSwipe(Math.round(session.sweepCounts));
     };
@@ -311,17 +326,18 @@ export default function Home() {
     };
     captureMouseRef.current = captureMeasurementMouse;
 
-    const onCanvasClick = () => {
-      captureMeasurementMouse();
+    const onDocumentClick = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("button, a, input, select, textarea, summary")) return;
+      if (captureArmedRef.current) captureMeasurementMouse();
     };
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape" && document.pointerLockElement !== canvas) {
-        setImmersiveCapture(false);
+        disarmCaptureGuide();
       }
     };
 
     canvas.addEventListener("mousemove", onMouseMove);
-    canvas.addEventListener("click", onCanvasClick);
+    document.addEventListener("click", onDocumentClick);
     document.addEventListener("pointerlockchange", onLockChange);
     document.addEventListener("keydown", onEscape);
     let frame = 0;
@@ -335,7 +351,7 @@ export default function Home() {
       cancelAnimationFrame(frame);
       observer.disconnect();
       canvas.removeEventListener("mousemove", onMouseMove);
-      canvas.removeEventListener("click", onCanvasClick);
+      document.removeEventListener("click", onDocumentClick);
       document.removeEventListener("pointerlockchange", onLockChange);
       document.removeEventListener("keydown", onEscape);
       if (document.pointerLockElement === canvas) document.exitPointerLock();
@@ -365,8 +381,8 @@ export default function Home() {
     setSelectedCandidateId(null);
     setSensitivityAdjustmentSteps(0);
     setErrorMessage("");
-    setMessage("Measure the same straight, comfortable edge-to-edge swipe three times. Press Esc after each one.");
-    setImmersiveCapture(true);
+    setMessage("Measure the same straight, comfortable swipe three times. Click anywhere to begin each swipe, then press Esc at the far edge.");
+    armCaptureGuide();
     setPhase("sweep");
   };
 
@@ -383,8 +399,8 @@ export default function Home() {
     setSwipeReadings([]);
     setDpiCounts(0);
     setErrorMessage("");
-    setMessage("Click Start estimate below, then click the chamber. One card length, then Esc to lock it.");
-    setImmersiveCapture(true);
+    setMessage("Use a bank card. Click Start estimate, then click anywhere to begin. Move your mouse along the card's long side and press Esc.");
+    armCaptureGuide();
     setPhase("dpi");
   };
 
@@ -456,17 +472,6 @@ export default function Home() {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.4, delay: 0.16, ease: "easeOut" }}
         >
-          <div className={styles.sideNavBrand}>
-            <details className={styles.profileMenu}>
-              <summary className={styles.profileButton} aria-label="Open profile menu">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.5-3.6 2.8-5.4 6.5-5.4s6 1.8 6.5 5.4" /></svg>
-              </summary>
-              <div className={styles.profileDropdown}>
-                {user ? <><strong>{user.email.split("@")[0]}</strong><button type="button" onClick={logout}>Sign out</button></> : <><Link href="/login">Log in</Link><Link href="/signup">Create account</Link></>}
-              </div>
-            </details>
-            <span><strong>SensLab</strong><small>Find your sensitivity</small></span>
-          </div>
           <Link className={styles.sideNavItemActive} href="/calibrate" aria-current="page">
             <span aria-hidden="true">⌖</span>
             <span><strong>Sensitivity finder</strong><small>Find your starting sens</small></span>
@@ -486,9 +491,18 @@ export default function Home() {
             <span aria-hidden="true">▤</span>
             <span><strong>Progress</strong><small>Review your history</small></span>
           </Link>
-          <div className={styles.sideNavGame}>
-            <span>Current game</span>
-            <strong>{gameProfile.name}</strong>
+          <div className={styles.sideNavProfileBottom}>
+            <details className={styles.profileMenu}>
+              <summary className={styles.profileButton} aria-label="Open profile menu" title="Profile">
+                <Image className={styles.profileLogo} src="/senslab-minimal-logo.png" alt="" width={30} height={30} />
+                <span className={styles.profilePerson} aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5" /><path d="M5.5 20c.5-3.6 2.8-5.4 6.5-5.4s6 1.8 6.5 5.4" /></svg>
+                </span>
+              </summary>
+              <div className={styles.profileDropdown}>
+                {user ? <><strong>{user.username || user.email.split("@")[0]}</strong><Link href="/account">Account settings</Link><button type="button" onClick={logout}>Sign out</button></> : <><Link href="/login">Log in</Link><Link href="/signup">Create account</Link></>}
+              </div>
+            </details>
           </div>
         </motion.nav>
 
@@ -497,7 +511,7 @@ export default function Home() {
           <div
             className={styles.crosshair}
             data-shape={crosshairShape}
-            style={{ "--crosshair-color": crosshairColor, "--crosshair-size": `${crosshairSize}px`, "--crosshair-gap": `${crosshairGap}px` } as CSSProperties}
+            style={{ "--crosshair-color": crosshairColor, "--crosshair-size": `${crosshairSize}px`, "--crosshair-gap": `${crosshairGap}px`, "--crosshair-dot-size": `${Math.max(3, Math.round(crosshairSize / 4))}px` } as CSSProperties}
             aria-hidden="true"
           >
             <span /><span /><span /><span /><span />
@@ -508,11 +522,11 @@ export default function Home() {
               <strong>{locked ? "Reach the far edge, then press Esc" : phase === "dpi" ? `Swipe ${dpiReadings.length + 1} of 3` : `Swipe ${swipeReadings.length + 1} of 3`}</strong>
               <p>{locked
                 ? phase === "dpi"
-                  ? "Move one card length in a straight line. Stop at the end, then press Esc to save this swipe."
+                  ? "Move your mouse from one end of the card to the other. Stop, then press Esc to save this swipe."
                   : "Swipe from one end of your mousepad to the other in a straight path. Stop as soon as you reach the far edge, then press Esc to save this swipe."
                 : phase === "dpi"
-                  ? "Click the range, move one card length in a straight line, then press Esc."
-                  : "Click the range to capture your mouse. Start at one edge of your mousepad. Swipe straight to the opposite edge, stop there, and press Esc."}</p>
+                  ? "Click anywhere to begin. Move your mouse along the card's long side, then press Esc."
+                  : "Click anywhere to capture your mouse. Start at one edge of your mousepad. Swipe straight to the other edge, stop there, and press Esc."}</p>
               {locked && <p className={styles.captureCount}>Movement captured: {(phase === "dpi" ? dpiCounts : sweepCounts).toLocaleString()} counts</p>}
               {phase === "sweep" && <div className={styles.captureProgress} aria-label={`${swipeReadings.length} of 3 swipes saved`}>
                 {[0, 1, 2].map((index) => <span key={index} data-complete={index < swipeReadings.length ? "true" : "false"} />)}
@@ -566,14 +580,14 @@ export default function Home() {
                 setPhase("setup");
               }} /></label>
             </div>
-            <p className={styles.hint}>{validDpi ? `Locked at ${validDpi} DPI. Keep this set in your mouse software.` : "Punch in the DPI from your mouse software to compute your settings."}</p>
+            <p className={styles.hint}>{validDpi ? `DPI set to ${validDpi}. Keep the same value in your mouse software.` : "Enter the DPI shown in your mouse software to calculate your settings."}</p>
             <details className={styles.dpiHelp}>
-              <summary>No idea? Estimate it here</summary>
-              <p className={styles.hint}>Check it in your mouse app first if possible. Otherwise use a standard card's long edge for three swipes. This estimates counts per inch; it cannot read your mouse sensor setting.</p>
+              <summary>Need help finding your DPI?</summary>
+              <p className={styles.hint}>First, check your mouse software. If you can’t find your DPI there, use a bank card. Move your mouse along the card’s long side in a straight line. Repeat this three times. We’ll use the middle result to estimate your DPI. This is only an estimate; SensLab can’t read your mouse’s actual DPI.</p>
               {phase === "dpi" ? (
-                <p className={styles.activeTask}>Swipe one card length and press Esc. Counts: {dpiCounts}</p>
+                <p className={styles.activeTask}>Move your mouse along the card’s long side, then press Esc. Movement: {dpiCounts}</p>
               ) : (
-                <button className={styles.secondaryButton} onClick={startDpiSwipe}>{dpiReadings.length === 0 ? "Start 3-swipe DPI estimate" : dpiReadings.length === 3 ? "Measure DPI again" : `Continue estimate · swipe ${dpiReadings.length + 1}/3`}</button>
+                <button className={styles.secondaryButton} onClick={startDpiSwipe}>{dpiReadings.length === 0 ? "Start estimate" : dpiReadings.length === 3 ? "Measure again" : `Continue · swipe ${dpiReadings.length + 1} of 3`}</button>
               )}
               {dpiReadings.length > 0 && <p className={styles.resultLine}>{dpiReadings.length} of 3 swipes saved{validDpi !== null && dpiReadings.length === 3 ? ` - estimated ${validDpi} DPI (rounded down to the nearest 100)` : ""}</p>}
             </details>
@@ -585,14 +599,14 @@ export default function Home() {
             {phase === "sweep" ? (
               <div className={styles.activeTask}>
                 <strong>{sweepCounts.toLocaleString()} movement counts</strong>
-                <span>{swipeReadings.length} of 3 saved. Click the range to capture the mouse, make the same straight swipe, then press Esc. Repeat from the same starting edge.</span>
-                {!locked && <button className={styles.primaryButton} onClick={() => { setImmersiveCapture(true); captureMouseRef.current(); }}>Start swipe {swipeReadings.length + 1} of 3</button>}
+                <span>{swipeReadings.length} of 3 saved. Click anywhere to begin, make the same straight swipe, then press Esc. Repeat from the same starting edge.</span>
+                {!locked && <button className={styles.primaryButton} onClick={armCaptureGuide}>Prepare swipe {swipeReadings.length + 1} of 3</button>}
               </div>
             ) : phase === "dpi" ? (
               <div className={styles.activeTask}>
                 <strong>{dpiCounts.toLocaleString()} movement counts</strong>
-                <span>Click the range to capture the mouse. Move one card length, then press Esc to save this swipe.</span>
-                {!locked && <button className={styles.secondaryButton} onClick={() => { setImmersiveCapture(true); captureMouseRef.current(); }}>Start estimate swipe</button>}
+                <span>Move your mouse along the card’s long side, then press Esc to save this swipe.</span>
+                {!locked && <button className={styles.secondaryButton} onClick={() => { armCaptureGuide(); captureMouseRef.current(); }}>Start estimate swipe</button>}
               </div>
             ) : (
               <button className={styles.primaryButton} onClick={startSweep} disabled={validDpi === null}>Measure 3 comfortable swipes</button>

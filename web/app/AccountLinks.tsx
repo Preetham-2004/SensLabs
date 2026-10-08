@@ -10,8 +10,9 @@ export default function AccountLinks() {
   return (
     <nav className={styles.accountLinks} aria-label="Account">
       {user ? <>
-        <span>{user.email}</span>
-        <Link href="/history">History</Link>
+        <span>{user.username || user.email.split("@")[0]}</span>
+        <Link href="/account">Account</Link>
+        <Link href="/history">My history</Link>
         <button type="button" onClick={logout}>Sign out</button>
       </> : <>
         <Link href="/login">Log in</Link>

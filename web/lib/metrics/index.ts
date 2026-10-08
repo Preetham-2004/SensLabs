@@ -1,4 +1,4 @@
-export type ClickSample = { time: number; hit: boolean; errorDeg: number };
+export type ClickSample = { time: number; hit: boolean; errorDeg: number; timeToHitMs?: number };
 export type MouseSample = { time: number; dx: number; dy: number; yaw: number; pitch: number };
 export type FlickAttempt = ClickSample & { spawnTime: number; overshootDeg: number; undershootDeg: number };
 export type TrackingObservation = { time: number; errorDeg: number; targetRadiusDeg: number };
@@ -67,11 +67,13 @@ export function calculateTrackingMetrics(observations: TrackingObservation[]): T
   };
 }
 
-export function calculatePrecisionMetrics(clicks: ClickSample[], spawnTimes: number[]): PrecisionMetrics {
+export function calculatePrecisionMetrics(clicks: Array<ClickSample & { spawnTime?: number }>, spawnTimes: number[]): PrecisionMetrics {
   const hits = clicks.filter((click) => click.hit);
   return {
     hitRatePercent: spawnTimes.length ? (hits.length / spawnTimes.length) * 100 : 0,
     meanTimeToHitMs: average(hits.map((click) => {
+      if (click.timeToHitMs !== undefined) return click.timeToHitMs;
+      if (click.spawnTime !== undefined) return Math.max(0, click.time - click.spawnTime);
       let spawnTime = spawnTimes[0] ?? click.time;
       for (const time of spawnTimes) if (time <= click.time) spawnTime = time;
       return click.time - spawnTime;

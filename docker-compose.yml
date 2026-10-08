@@ -10,7 +10,7 @@
       - web_next:/app/.next
     environment:
       WATCHPACK_POLLING: "true"
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      API_ORIGIN: http://api:8000
     depends_on:
       - api
 
@@ -24,7 +24,7 @@
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in the root .env file}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?Set SUPABASE_SECRET_KEY in the root .env file}
-      APP_SITE_URL: ${APP_SITE_URL:-http://localhost:3000}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in the root .env file}
       API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
 
 volumes:

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import styles from "./reaction.module.css";
@@ -60,6 +60,9 @@ export default function ReactionTest({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const respondRef = useRef(respond);
+  useEffect(() => { respondRef.current = respond; });
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -67,16 +70,17 @@ export default function ReactionTest({ onClose }: { onClose: () => void }) {
         onClose();
       } else if (event.code === "Space" || event.key === "Enter") {
         event.preventDefault();
-        respond(event.timeStamp);
+        respondRef.current(event.timeStamp);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, [onClose]);
   useEffect(() => () => {
     if (timeout.current) clearTimeout(timeout.current);
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
+
 
   const average = times.length ? times.reduce((sum, time) => sum + time, 0) / times.length : null;
   const best = times.length ? Math.min(...times) : null;
@@ -93,15 +97,20 @@ export default function ReactionTest({ onClose }: { onClose: () => void }) {
         <div><span className={styles.panelEyebrow}>BONUS · JUST FOR FUN</span><strong>Reaction check</strong></div>
         <button type="button" className={styles.closeButton} onClick={() => { clearTimer(); onClose(); }} aria-label="Close reaction test">×</button>
       </header>
+      <div className={styles.stats} aria-live="polite">
+        <div><span>AVERAGE</span><strong>{average === null ? "—" : `${average.toFixed(1)} ms`}</strong></div>
+        <div><span>BEST</span><strong>{best === null ? "—" : `${best.toFixed(1)} ms`}</strong></div>
+        <div><span>LAST TRY</span><strong>{current === null ? "—" : `${current.toFixed(1)} ms`}</strong></div>
+        <div><span>ROUNDS</span><strong>{times.length} / {TOTAL_TRIES}</strong></div>
+      </div>
       <button className={styles.light} data-state={phase} type="button" onPointerDown={(event) => respond(event.timeStamp)} aria-live="polite">
         <span className={styles.lamp} aria-hidden="true" />
         <strong>{prompt}</strong>
         <small>{phase === "waiting" ? "Don't click yet" : phase === "go" ? "Click the light as fast as you can" : times.length + " / " + TOTAL_TRIES + " tries"}</small>
       </button>
       <div className={styles.panelFooter}>
-        <span>AVG <b>{average === null ? "—" : average.toFixed(1) + " ms"}</b></span>
-        <span>BEST <b>{best === null ? "—" : best.toFixed(1) + " ms"}</b></span>
         {phase === "finished" && <button type="button" className={styles.retry} onClick={reset}>Again</button>}
+        {phase !== "finished" && <span>Click or press Space when the light turns green.</span>}
       </div>
       <p className={styles.disclaimer}>Just for fun; it says nothing about your skill. Browser and display timing affect the result.</p>
     </section>

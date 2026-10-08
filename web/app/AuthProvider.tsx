@@ -1,22 +1,26 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { apiRequest, TOKEN_KEY } from "../lib/apiClient";
-import { discardGuestData, LOCAL_CALIBRATIONS_KEY, LOCAL_ROUNDS_KEY, readLocalPlayerData, readLocalRecords, writeLocalRecords } from "../lib/playerData";
+import { useRouter } from "next/navigation";
+import { apiRequest, COOKIE_SESSION } from "../lib/apiClient";
+import { discardGuestData, LOCAL_CALIBRATIONS_KEY, LOCAL_ROUNDS_KEY, PLAYER_DATA_KEY, readLocalPlayerData, readLocalRecords, writeLocalRecords } from "../lib/playerData";
 
-type User = { id: string; email: string };
+export type GamePreference = "valorant" | "cs2";
+export type User = { id: string; email: string; username?: string; preferred_game?: GamePreference };
 type AuthContextValue = {
   user: User | null;
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  signup: (email: string, password: string, username: string, preferredGame: GamePreference) => Promise<void>;
+  updateAccount: (username: string, preferredGame: GamePreference) => Promise<void>;
+  deleteAccount: () => Promise<void>;
+  logout: () => Promise<void>;
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-type AuthResponse = { access_token?: string; confirmation_required?: boolean; user?: User };
-type SignedInResponse = { access_token: string; user: User };
+type AuthResponse = { user?: User };
+type SignedInResponse = { user: User };
 
 async function uploadLocalData(token: string, userId: string) {
   const profile = readLocalPlayerData();
@@ -45,64 +49,69 @@ async function uploadLocalData(token: string, userId: string) {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const accept = useCallback(async (response: SignedInResponse) => {
-    localStorage.setItem(TOKEN_KEY, response.access_token);
-    setToken(response.access_token);
+    setToken(COOKIE_SESSION);
     setUser(response.user);
-    void uploadLocalData(response.access_token, response.user.id);
+    void uploadLocalData(COOKIE_SESSION, response.user.id);
   }, []);
 
   useEffect(() => {
-    const callbackParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-    const callbackToken = callbackParams.get("access_token");
-    if (callbackToken) {
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
-      setToken(callbackToken);
-      apiRequest<User>("/auth/me", callbackToken)
-        .then((currentUser) => {
-          localStorage.setItem(TOKEN_KEY, callbackToken);
-          setUser(currentUser);
-          void uploadLocalData(callbackToken, currentUser.id);
-        })
-        .catch(() => {
-          setToken(null);
-          localStorage.removeItem(TOKEN_KEY);
-          discardGuestData();
-        })
-        .finally(() => setLoading(false));
-      return;
-    }
-
-    const storedToken = localStorage.getItem(TOKEN_KEY);
-    if (!storedToken) { discardGuestData(); setLoading(false); return; }
-    setToken(storedToken);
-    apiRequest<User>("/auth/me", storedToken)
-      .then((currentUser) => { setUser(currentUser); void uploadLocalData(storedToken, currentUser.id); })
-      .catch(() => { localStorage.removeItem(TOKEN_KEY); setToken(null); discardGuestData(); })
+    const legacyToken = localStorage.getItem("senslab:access-token");
+    const restoreSession = legacyToken
+      ? apiRequest<User>("/auth/session", null, { method: "POST", headers: { Authorization: `Bearer ${legacyToken}` } })
+      : apiRequest<User>("/auth/me");
+    if (legacyToken) localStorage.removeItem("senslab:access-token");
+    restoreSession
+      .then((currentUser) => { setToken(COOKIE_SESSION); setUser(currentUser); void uploadLocalData(COOKIE_SESSION, currentUser.id); })
+      .catch(() => { setToken(null); discardGuestData(); })
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
-    await accept(await apiRequest<SignedInResponse>("/auth/login", null, { method: "POST", body: JSON.stringify({ email, password }) }));
+    const response = await apiRequest<SignedInResponse>("/auth/login", null, { method: "POST", body: JSON.stringify({ email, password }) });
+    await accept(response);
   }, [accept]);
-  const signup = useCallback(async (email: string, password: string) => {
-    const response = await apiRequest<AuthResponse>("/auth/signup", null, { method: "POST", body: JSON.stringify({ email, password }) });
-    if (!response.access_token || !response.user) return false;
-    await accept({ access_token: response.access_token, user: response.user });
-    return true;
+  const signup = useCallback(async (email: string, password: string, username: string, preferredGame: GamePreference) => {
+    const response = await apiRequest<AuthResponse>("/auth/signup", null, { method: "POST", body: JSON.stringify({ email, password, username, preferred_game: preferredGame }) });
+    if (!response.user) throw new Error("Could not sign in after creating your account. Please try logging in.");
+    await accept(response as SignedInResponse);
   }, [accept]);
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
+  const updateAccount = useCallback(async (username: string, preferredGame: GamePreference) => {
+    if (!token) throw new Error("Please sign in to update your account.");
+    const updated = await apiRequest<User>("/auth/profile", token, {
+      method: "PATCH",
+      body: JSON.stringify({ username, preferred_game: preferredGame }),
+    });
+    setUser(updated);
+  }, [token]);
+  const deleteAccount = useCallback(async () => {
+    if (!token || !user) throw new Error("Please sign in before deleting your account.");
+    await apiRequest<{ status: string }>("/auth/account", token, { method: "DELETE" });
+
+    const accountId = user.id;
+    const localProfile = readLocalPlayerData();
+    if (localProfile?.ownerId === accountId) localStorage.removeItem(PLAYER_DATA_KEY);
+    for (const key of [LOCAL_CALIBRATIONS_KEY, LOCAL_ROUNDS_KEY]) {
+      writeLocalRecords(key, readLocalRecords(key).filter((record) => record.ownerId !== accountId));
+    }
+    setToken(null);
+    setUser(null);
+  }, [token, user]);
+  const logout = useCallback(async () => {
+    await apiRequest("/auth/logout", null, { method: "POST" }).catch(() => {});
+    localStorage.removeItem("senslab:access-token");
     localStorage.removeItem("senslab:player-data");
     discardGuestData();
     setToken(null);
     setUser(null);
-  }, []);
-  const value = useMemo(() => ({ user, token, loading, login, signup, logout }), [user, token, loading, login, signup, logout]);
+    router.replace("/");
+  }, [router]);
+  const value = useMemo(() => ({ user, token, loading, login, signup, updateAccount, deleteAccount, logout }), [user, token, loading, login, signup, updateAccount, deleteAccount, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

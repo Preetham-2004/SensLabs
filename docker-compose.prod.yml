@@ -9,8 +9,9 @@
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?Set SUPABASE_URL in .env}
       SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:?Set SUPABASE_SECRET_KEY in .env}
-      APP_SITE_URL: ${APP_SITE_URL:?Set APP_SITE_URL to the public SensLab site URL}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?Set SUPABASE_PUBLISHABLE_KEY in .env}
       API_ALLOWED_ORIGINS: ${API_ALLOWED_ORIGINS:?Set API_ALLOWED_ORIGINS to the public SensLab site origin}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
       APP_ENV: production
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
@@ -24,7 +25,7 @@
       context: ./web
       dockerfile: Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL to the public API URL}
+        API_ORIGIN: ${API_ORIGIN:?Set API_ORIGIN to the public API URL}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-3000}:3000"
