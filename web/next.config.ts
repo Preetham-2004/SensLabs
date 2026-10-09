@@ -4,7 +4,6 @@ if (process.env.NODE_ENV === "production" && !process.env.API_ORIGIN) {
   throw new Error("Set API_ORIGIN to the public backend URL before building the production website.");
 }
 const apiOrigin = (process.env.API_ORIGIN ?? "http://localhost:8000").replace(/\/+$/, "");
-const isNetlifyBuild = process.env.SENSLAB_DEPLOY_TARGET === "netlify";
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -20,7 +19,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  ...(isNetlifyBuild ? {} : { output: "standalone" }),
+  ...(process.env.VERCEL ? {} : { output: "standalone" }),
   poweredByHeader: false,
   async headers() {
     return [{
