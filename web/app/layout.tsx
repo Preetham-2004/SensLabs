@@ -8,7 +8,7 @@ const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-display", 
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono" });
 
 export const metadata: Metadata = {
-  title: "SensLab | Dial In Your Aim",
+  title: "SensLabs",
   description: "Calibrate your mouse sensitivity, lock in your settings, and dominate in the practice arena.",
 };
 
