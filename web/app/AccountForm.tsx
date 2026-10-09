@@ -34,8 +34,12 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
     setError("");
     try {
       if (isSignup) {
-        await signup(email, password, username, preferredGame);
-        setSignupSent(true);
+        const requiresEmailConfirmation = await signup(email, password, username, preferredGame);
+        if (requiresEmailConfirmation) {
+          setSignupSent(true);
+          return;
+        }
+        goToPhaseOneWithTransition();
         return;
       }
       await login(email, password);
@@ -55,7 +59,7 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
           <h1>{isSignup ? "Save your progress" : "Welcome back"}</h1>
           <p>{isSignup ? "Keep your calibration, settings, and practice rounds together." : "Sign in to continue with your saved calibration and history."}</p>
           {signupSent ? <div role="status">
-            <p>Check your inbox for a confirmation link. After confirming your email, return here to log in.</p>
+            <p>Your account has been created. Check your inbox for a confirmation link, then return here to log in.</p>
             <Link href="/login">Go to login</Link>
           </div> : <form onSubmit={submit}>
             {isSignup && <>

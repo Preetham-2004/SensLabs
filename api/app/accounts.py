@@ -263,7 +263,7 @@ def health_check() -> dict[str, str]:
 
 
 @app.post("/auth/signup", status_code=201, tags=["account"])
-def sign_up(payload: SignupPayload, request: Request) -> dict[str, str]:
+def sign_up(payload: SignupPayload, request: Request, response: Response) -> dict[str, Any]:
     try:
         check_auth_rate_limit(request, payload)
         client = supabase_client()
@@ -280,12 +280,6 @@ def sign_up(payload: SignupPayload, request: Request) -> dict[str, str]:
         created_user = getattr(auth_response, "user", None)
         if created_user is None:
             raise ValueError("Supabase did not return the created account")
-        if getattr(auth_response, "session", None) is not None:
-            try:
-                client.auth.admin.delete_user(str(created_user.id))
-            except Exception as cleanup_error:
-                logger.error("Could not remove account created without email confirmation (type=%s)", type(cleanup_error).__name__)
-            raise HTTPException(status_code=503, detail="Email confirmation is disabled in Supabase. Enable Confirm email, then try again.")
         profile = {
             "user_id": str(created_user.id),
             "username": payload.username,
@@ -300,7 +294,13 @@ def sign_up(payload: SignupPayload, request: Request) -> dict[str, str]:
             except Exception as cleanup_error:
                 logger.error("Could not clean up incomplete signup (type=%s)", type(cleanup_error).__name__)
             raise
-        return {"message": "Account created. Check your email for the confirmation link, then return here to log in."}
+        if getattr(auth_response, "session", None) is not None:
+            signed_in = auth_session_response(auth_response, response)
+            return {"requires_email_confirmation": False, **signed_in}
+        return {
+            "requires_email_confirmation": True,
+            "message": "Your account is ready. Check your email for a confirmation link, then log in.",
+        }
     except HTTPException:
         raise
     except Exception as error:

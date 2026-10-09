@@ -125,18 +125,17 @@ Set these backend environment variables in Render:
 | `API_ALLOWED_ORIGINS` | Your exact website origin, such as `https://sens-labs.vercel.app`. |
 | `FORWARDED_ALLOW_IPS` | Only the trusted proxy addresses documented by your backend host. Don’t set this to `*` on a public API. |
 
-### Supabase · accounts and email
+### Supabase · accounts
 
-- Enable **Confirm email** in the email authentication settings.
-- Set the **Site URL** to your production Vercel URL and add it to the allowed redirect URLs.
-- Configure custom SMTP so confirmation email can be delivered to your users.
-- New users must confirm their email before logging in. Existing accounts are not affected.
+- Keep email and password sign-up enabled.
+- Disable **Confirm email** if you want users to sign in immediately after creating an account.
+- With confirmation disabled, Supabase does not verify that a user owns the email address they enter.
 
 ### Before inviting players
 
 - Confirm the Vercel deployment and Render service both show **Live/Ready**.
 - Confirm `API_ALLOWED_ORIGINS` exactly matches the production website origin.
-- Test signup with a new email address, click the confirmation link, then test login and saved progress.
+- Test signup with a new email address, confirm the user is signed in, and check saved progress.
 - Keep production secrets in provider environment settings, not in the repository.
 
 ## Security notes
