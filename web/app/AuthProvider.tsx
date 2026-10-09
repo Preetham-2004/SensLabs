@@ -12,7 +12,7 @@ type AuthContextValue = {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, username: string, preferredGame: GamePreference) => Promise<void>;
+  signup: (email: string, password: string, username: string, preferredGame: GamePreference) => Promise<boolean>;
   updateAccount: (username: string, preferredGame: GamePreference) => Promise<void>;
   deleteAccount: () => Promise<void>;
   logout: () => Promise<void>;
