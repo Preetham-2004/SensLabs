@@ -18,6 +18,7 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
   const [preferredGame, setPreferredGame] = useState<GamePreference>("valorant");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [signupSent, setSignupSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const isSignup = mode === "signup";
@@ -34,7 +35,10 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
     try {
       if (isSignup) {
         await signup(email, password, username, preferredGame);
-      } else await login(email, password);
+        setSignupSent(true);
+        return;
+      }
+      await login(email, password);
       goToPhaseOneWithTransition();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not sign in.");
@@ -50,7 +54,10 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
           <p className="eyebrow">SensLab account</p>
           <h1>{isSignup ? "Save your progress" : "Welcome back"}</h1>
           <p>{isSignup ? "Keep your calibration, settings, and practice rounds together." : "Sign in to continue with your saved calibration and history."}</p>
-          <form onSubmit={submit}>
+          {signupSent ? <div role="status">
+            <p>Check your inbox for a confirmation link. After confirming your email, return here to log in.</p>
+            <Link href="/login">Go to login</Link>
+          </div> : <form onSubmit={submit}>
             {isSignup && <>
               <label>Username<input type="text" autoComplete="username" minLength={3} maxLength={24} pattern="[A-Za-z0-9_]+" required value={username} onChange={(event) => setUsername(event.target.value)} aria-describedby="username-help" /></label>
               <small id="username-help" className={styles.fieldHelp}>3–24 characters; letters, numbers, and underscores.</small>
@@ -60,7 +67,7 @@ export default function AccountForm({ mode }: { mode: "login" | "signup" }) {
             <label>Password<span className={styles.passwordField}><input type={showPassword ? "text" : "password"} autoComplete={isSignup ? "new-password" : "current-password"} minLength={isSignup ? 12 : 8} maxLength={128} required value={password} onChange={(event) => setPassword(event.target.value)} /><button type="button" className={styles.passwordToggle} onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}>{showPassword ? "Hide" : "Show"}</button></span></label>
             {error && <p className={styles.error} role="alert">{error}</p>}
             <button type="submit" disabled={busy}>{busy ? "Please wait…" : isSignup ? "Create account" : "Log in"}</button>
-          </form>
+          </form>}
           <p className={styles.subtle}>{isSignup ? "Already have an account?" : "New to SensLab?"} <Link href={isSignup ? "/login" : "/signup"}>{isSignup ? "Log in" : "Create an account"}</Link></p>
           <p className={styles.subtle}>Passwords must be at least {isSignup ? "12" : "8"} characters.</p>
         </section>

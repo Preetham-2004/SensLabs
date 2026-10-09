@@ -32,11 +32,15 @@ def check_auth_rate_limit(request: Request, payload: Any = None) -> None:
     if not pepper:
         raise HTTPException(status_code=503, detail="Sign-in is temporarily unavailable. Please try again shortly.")
     ip_key = hmac.new(pepper, client_ip.encode(), sha256).hexdigest()
-    account_key = hmac.new(pepper, f"{client_ip}\0{email}".encode(), sha256).hexdigest()
+    # Key account attempts by email alone so changing IPs cannot bypass the limit.
+    # Endpoints without an email (for example session establishment) use only the IP limit.
+    account_key = hmac.new(pepper, f"account\0{email}".encode(), sha256).hexdigest() if email else None
     try:
         client = supabase_client()
         ip_result = client.rpc("consume_auth_rate_limit", {"p_key_hash": ip_key, "p_limit": AUTH_RATE_LIMIT_MAX_PER_IP}).execute().data
-        account_result = client.rpc("consume_auth_rate_limit", {"p_key_hash": account_key, "p_limit": AUTH_RATE_LIMIT_MAX_PER_ACCOUNT}).execute().data
+        account_result = True
+        if account_key is not None:
+            account_result = client.rpc("consume_auth_rate_limit", {"p_key_hash": account_key, "p_limit": AUTH_RATE_LIMIT_MAX_PER_ACCOUNT}).execute().data
         if ip_result is not True or account_result is not True:
             raise HTTPException(status_code=429, detail="Too many sign-in or account creation attempts. Please wait a minute before trying again.")
     except HTTPException:
@@ -57,6 +61,14 @@ def create_supabase_client() -> Client:
 @lru_cache(maxsize=1)
 def supabase_client() -> Client:
     return create_supabase_client()
+
+
+def create_auth_client() -> Client:
+    url = os.getenv("SUPABASE_URL", "").strip()
+    key = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Supabase authentication is not configured. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY.")
+    return create_client(url, key)
 
 
 def account_profile(user_id: str) -> dict[str, Any] | None:
@@ -251,7 +263,7 @@ def health_check() -> dict[str, str]:
 
 
 @app.post("/auth/signup", status_code=201, tags=["account"])
-def sign_up(payload: SignupPayload, request: Request, response: Response) -> dict[str, Any]:
+def sign_up(payload: SignupPayload, request: Request) -> dict[str, str]:
     try:
         check_auth_rate_limit(request, payload)
         client = supabase_client()
@@ -259,15 +271,21 @@ def sign_up(payload: SignupPayload, request: Request, response: Response) -> dic
         if not publishable_key:
             raise HTTPException(status_code=503, detail="Account creation is not configured. Set SUPABASE_PUBLISHABLE_KEY.")
         email = payload.email.strip().lower()
-        created = client.auth.admin.create_user({
+        registration_client = create_auth_client()
+        auth_response = registration_client.auth.sign_up({
             "email": email,
             "password": payload.password,
-            "email_confirm": True,
-            "user_metadata": {"username": payload.username, "preferred_game": payload.preferred_game},
+            "options": {"data": {"username": payload.username, "preferred_game": payload.preferred_game}},
         })
-        created_user = getattr(created, "user", None)
+        created_user = getattr(auth_response, "user", None)
         if created_user is None:
             raise ValueError("Supabase did not return the created account")
+        if getattr(auth_response, "session", None) is not None:
+            try:
+                client.auth.admin.delete_user(str(created_user.id))
+            except Exception as cleanup_error:
+                logger.error("Could not remove account created without email confirmation (type=%s)", type(cleanup_error).__name__)
+            raise HTTPException(status_code=503, detail="Email confirmation is disabled in Supabase. Enable Confirm email, then try again.")
         profile = {
             "user_id": str(created_user.id),
             "username": payload.username,
@@ -282,9 +300,7 @@ def sign_up(payload: SignupPayload, request: Request, response: Response) -> dic
             except Exception as cleanup_error:
                 logger.error("Could not clean up incomplete signup (type=%s)", type(cleanup_error).__name__)
             raise
-        session_client = create_client(os.getenv("SUPABASE_URL", "").strip(), publishable_key)
-        auth_response = session_client.auth.sign_in_with_password({"email": email, "password": payload.password})
-        return auth_session_response(auth_response, response)
+        return {"message": "Account created. Check your email for the confirmation link, then return here to log in."}
     except HTTPException:
         raise
     except Exception as error:
@@ -300,8 +316,7 @@ def sign_up(payload: SignupPayload, request: Request, response: Response) -> dic
             raise HTTPException(status_code=422, detail="Enter a valid email address.") from error
         if "user already registered" in error_text or "already been registered" in error_text or error_code == "23503":
             raise HTTPException(status_code=409, detail="This email may already have an account. Try logging in instead.") from error
-        raise HTTPException(status_code=400, detail="Could not create the account. The email may already be registered or the username may already be taken.") from error
-
+        raise HTTPException(status_code=400, detail="Could not create the account. Check the email and username, then try again.") from error
 
 @app.post("/auth/login", tags=["account"])
 def log_in(payload: Credentials, request: Request, response: Response) -> dict[str, Any]:
@@ -309,13 +324,17 @@ def log_in(payload: Credentials, request: Request, response: Response) -> dict[s
         check_auth_rate_limit(request, payload)
         # Keep user auth sessions separate from the service-role client used for
         # database access. Supabase clients retain the session after sign-in.
-        session_client = create_supabase_client()
+        session_client = create_auth_client()
         auth_response = session_client.auth.sign_in_with_password({"email": payload.email.strip().lower(), "password": payload.password})
         session_response = auth_session_response(auth_response, response)
         return session_response
     except HTTPException:
         raise
     except Exception as error:
+        error_code = str(getattr(error, "code", "")).lower()
+        error_text = str(error).lower()
+        if error_code == "email_not_confirmed" or "email not confirmed" in error_text:
+            raise HTTPException(status_code=403, detail="Confirm your email address before logging in.") from error
         raise HTTPException(status_code=401, detail="Email or password is incorrect.") from error
 
 

@@ -19,7 +19,7 @@ type AuthContextValue = {
 };
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-type AuthResponse = { user?: User };
+type SignupResponse = { message: string };
 type SignedInResponse = { user: User };
 
 async function uploadLocalData(token: string, userId: string) {
@@ -77,10 +77,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await accept(response);
   }, [accept]);
   const signup = useCallback(async (email: string, password: string, username: string, preferredGame: GamePreference) => {
-    const response = await apiRequest<AuthResponse>("/auth/signup", null, { method: "POST", body: JSON.stringify({ email, password, username, preferred_game: preferredGame }) });
-    if (!response.user) throw new Error("Could not sign in after creating your account. Please try logging in.");
-    await accept(response as SignedInResponse);
-  }, [accept]);
+    await apiRequest<SignupResponse>("/auth/signup", null, { method: "POST", body: JSON.stringify({ email, password, username, preferred_game: preferredGame }) });
+  }, []);
   const updateAccount = useCallback(async (username: string, preferredGame: GamePreference) => {
     if (!token) throw new Error("Please sign in to update your account.");
     const updated = await apiRequest<User>("/auth/profile", token, {

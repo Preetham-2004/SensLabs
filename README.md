@@ -34,8 +34,8 @@ SensLab is a sensitivity calibration and aim-practice tool for **VALORANT** and 
 Before deploying an update:
 
 1. Run `supabase/migrations/20261008_auth_rate_limit.sql` in the Supabase SQL Editor. For a new project, run `supabase/schema.sql` instead.
-2. SensLab creates accounts as confirmed and signs users in right away. No email verification step is used.
-3. Set `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`, and `API_ALLOWED_ORIGINS` in the backend host. Keep the secret key on the backend only. The allowed origin must exactly match the website origin.
+2. In Supabase Authentication settings, enable Confirm email, set the Site URL to your production Vercel URL, and add that URL to the allowed redirect URLs. New accounts must confirm their email before logging in. Configure custom SMTP in Supabase so confirmation emails can be delivered to your users.
+3. Set `APP_ENV=production`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`, and `API_ALLOWED_ORIGINS` in the backend host. Keep the secret key on the backend only. The allowed origin must exactly match the website origin. `APP_ENV=production` enables secure session cookies and hides API documentation.
 4. For Vercel, set `API_ORIGIN` to the backend's public HTTPS origin in the project's environment variables. Configure the project root directory as `web` and use the default Next.js build settings. The website proxies API calls through its own origin so the browser can keep the login cookie HttpOnly. Vercel handles the Next.js deployment; Docker builds keep standalone output.
 5. Set `FORWARDED_ALLOW_IPS` on the backend only to the trusted proxy addresses or CIDRs documented by the backend host. This lets the shared login throttle use the user's real client address. Do not set it to `*` on a public API.
 
